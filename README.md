@@ -3,8 +3,15 @@
 A production-style, fully custom frontend for the **Coinchange Yield Prime**
 vault — a USD stablecoin vault on Ethereum mainnet whose share token is
 **CCUSD** (`name: "Yield Prime"`, 18 decimals) — built on
-[`boring-vault-ui@1.6.1`](https://www.npmjs.com/package/boring-vault-ui/v/1.6.1)
-per [`docs/Coinchange Boring Vault Frontend Integration.md`](./docs/Coinchange%20Boring%20Vault%20Frontend%20Integration.md).
+[`boring-vault-ui@1.6.1`](https://www.npmjs.com/package/boring-vault-ui/v/1.6.1).
+
+> **📖 Integrating this vault into your own frontend?** Start with the
+> [**Integration Guide**](./docs/INTEGRATION-GUIDE.md) — a comprehensive,
+> contract-verified walkthrough of the deposit and AtomicQueue redemption flows,
+> the Coinchange solver service that fills redemptions, both library-based and
+> direct-contract integration paths, and every known `boring-vault-ui@1.6.1`
+> caveat with its workaround. This repository is the reference implementation
+> that guide points into.
 
 It implements the full user surface: view the vault, deposit **USDC or USDT**,
 and redeem via the **AtomicQueue** (request → an off-chain solver fills it to

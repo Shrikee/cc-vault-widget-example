@@ -21,14 +21,18 @@ import { Button, InlineError } from "./ui";
 export function DepositPanel({
   signer,
   address,
+  sharesHeld,
   shareValue,
   rightChain,
+  paused,
   onSuccess,
 }: {
   signer: JsonRpcSigner | undefined;
   address?: `0x${string}`;
+  sharesHeld: number | null;
   shareValue: number | null;
   rightChain: boolean;
+  paused: boolean;
   onSuccess: () => void;
 }) {
   const { isBoringV1ContextReady, deposit, depositStatus } = useBoringVaultV1();
@@ -60,6 +64,7 @@ export function DepositPanel({
     isBoringV1ContextReady &&
     !!signer &&
     rightChain &&
+    !paused &&
     parsed !== null &&
     !overBalance &&
     !busy;
@@ -126,6 +131,13 @@ export function DepositPanel({
         After depositing, your {SHARE_SYMBOL} shares are locked for{" "}
         <strong>{formatDuration(SHARE_LOCK_PERIOD)}</strong> before they can be
         redeemed.
+        {sharesHeld !== null && sharesHeld > 0 && (
+          <>
+            {" "}
+            A new deposit re-locks your <strong>entire</strong> {SHARE_SYMBOL}{" "}
+            balance — including the shares you already hold.
+          </>
+        )}
       </div>
 
       <InlineError>{validationError}</InlineError>
@@ -187,8 +199,8 @@ export function DepositPanel({
         </div>
         <p className="muted small">
           You may be asked to sign twice: first to approve {symbol}, then to
-          deposit. Shares lock for {formatDuration(SHARE_LOCK_PERIOD)} after
-          deposit.
+          deposit. Your entire {SHARE_SYMBOL} balance locks for{" "}
+          {formatDuration(SHARE_LOCK_PERIOD)} after each deposit.
         </p>
       </Modal>
     </div>

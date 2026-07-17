@@ -73,9 +73,9 @@ export const WITHDRAW_TOKEN: Token = USDT;
 export const SHARE_LOCK_PERIOD = 86400; // 1 day
 
 // AtomicQueue redemption "discount" = the haircut vs NAV the user accepts so the
-// solver can fill and keep the spread. The contract caps it at MAX_DISCOUNT (1%);
-// the Coinchange solver's standard spread is 0.1%, so that is the sensible default
-// (a request priced at full NAV / 0% would never be filled).
+// solver can fill and keep the spread. The contract caps it at MAX_DISCOUNT (1%)
+// and only guarantees fills at or below NAV; 0.1% is the standard spread the
+// solver is designed around, so it is the sensible default.
 export const WITHDRAW_DISCOUNT_PCT_DEFAULT = 0.1;
 export const WITHDRAW_DISCOUNT_PCT_MAX = 1; // contract MAX_DISCOUNT = 0.01e6 = 1%
 

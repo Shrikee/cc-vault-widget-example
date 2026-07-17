@@ -1,6 +1,8 @@
+import { useEffect, useRef } from "react";
 import { erc20Abi } from "viem";
 import { useReadContract } from "wagmi";
 import { CONTRACTS, VAULT_DECIMALS, WITHDRAW_TOKEN } from "../config/vault";
+import { nowSeconds } from "../lib/time";
 
 // The user's open redemption request, decoded to human units.
 export interface WithdrawRequest {
@@ -54,8 +56,14 @@ const ATOMIC_QUEUE_ABI = [
 // UI can tell whether the request is actually fillable). Returns null when there
 // is no open request (offerAmount == 0). Polls so a filled/expired/stopped
 // request reflects promptly.
+//
+// `onFilled` fires when a poll observes the request transition from open to
+// zeroed. Only a solver fill zeroes the struct (a replace re-populates it, Stop
+// leaves it in place, expiry leaves it in place, and the solver can't fill past
+// the deadline), so a fillable→zero transition means the user got their USDT.
 export function useWithdrawRequest(
-  address?: `0x${string}`
+  address?: `0x${string}`,
+  onFilled?: () => void
 ): WithdrawRequestState {
   const reqQuery = useReadContract({
     address: CONTRACTS.withdrawQueue as `0x${string}`,
@@ -83,6 +91,46 @@ export function useWithdrawRequest(
 
   const raw = reqQuery.data;
   const allowance = allowanceQuery.data;
+
+  // Fill detection: remember the last observed request per address and fire
+  // onFilled on an open→zero transition (see the function comment). The callback
+  // lives in a ref so a new identity each render doesn't re-run the effect.
+  const onFilledRef = useRef(onFilled);
+  useEffect(() => {
+    onFilledRef.current = onFilled;
+  }, [onFilled]);
+  const lastSeen = useRef<{
+    addr: `0x${string}`;
+    offerAmount: bigint;
+    deadline: number;
+    inSolve: boolean;
+  } | null>(null);
+  useEffect(() => {
+    if (!address || raw === undefined) {
+      if (!address) lastSeen.current = null;
+      return;
+    }
+    const prev = lastSeen.current;
+    if (
+      prev &&
+      prev.addr === address &&
+      prev.offerAmount > 0n &&
+      raw.offerAmount === 0n &&
+      // The solver can only fill within the deadline; an expired struct going to
+      // zero would be an admin cleanup, not a payout — stay quiet on those. The
+      // grace covers a fill that landed just before a deadline we observe just
+      // after (we poll every 30s).
+      (prev.inSolve || nowSeconds() <= prev.deadline + 60)
+    ) {
+      onFilledRef.current?.();
+    }
+    lastSeen.current = {
+      addr: address,
+      offerAmount: raw.offerAmount,
+      deadline: Number(raw.deadline),
+      inSolve: raw.inSolve,
+    };
+  }, [address, raw]);
   let request: WithdrawRequest | null = null;
   if (raw && raw.offerAmount > 0n) {
     request = {

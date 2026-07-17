@@ -11,7 +11,7 @@ export function HowItWorks() {
     },
     {
       title: "1-day share lock",
-      body: `${SHARE_SYMBOL} shares can't be transferred or redeemed for 1 day after a deposit.`,
+      body: `${SHARE_SYMBOL} shares can't be transferred or redeemed for 1 day after a deposit. Each new deposit restarts the lock for your entire balance.`,
     },
     {
       title: "Earn yield",
@@ -23,7 +23,7 @@ export function HowItWorks() {
     },
     {
       title: "Solver fills to USDT",
-      body: "An off-chain solver fills your request and sends USDT to your wallet — no separate claim step. Cancel any time before it fills.",
+      body: "An off-chain solver fills your request and sends USDT to your wallet — no separate claim step. You can stop an open request before it fills.",
     },
   ];
 

@@ -34,6 +34,7 @@ export function WithdrawPanel({
   shareValue,
   unlockAt,
   rightChain,
+  paused,
   request,
   refetchRequest,
   onSuccess,
@@ -44,6 +45,7 @@ export function WithdrawPanel({
   shareValue: number | null;
   unlockAt: number | null;
   rightChain: boolean;
+  paused: boolean;
   request: WithdrawRequest | null;
   refetchRequest: () => void;
   onSuccess: () => void;
@@ -106,6 +108,7 @@ export function WithdrawPanel({
     isBoringV1ContextReady &&
     !!signer &&
     rightChain &&
+    !paused &&
     !locked &&
     parsed !== null &&
     !overShares &&

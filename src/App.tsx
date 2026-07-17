@@ -5,10 +5,13 @@ import { useBoringVaultV1, useEthersSigner } from "./lib/boringVault";
 import { useVaultMetrics } from "./hooks/useVaultMetrics";
 import { useUserPosition } from "./hooks/useUserPosition";
 import { useWithdrawRequest } from "./hooks/useWithdrawRequest";
+import { usePauseStatus } from "./hooks/usePauseStatus";
 import { CHAIN_ID, SHARE_SYMBOL, VAULT_NAME } from "./config/vault";
 
 import { Header } from "./components/Header";
 import { NetworkBanner } from "./components/NetworkBanner";
+import { PauseBanner } from "./components/PauseBanner";
+import { useToast } from "./components/Toaster";
 import { VaultStats } from "./components/VaultStats";
 import { PositionCard } from "./components/PositionCard";
 import { HowItWorks } from "./components/HowItWorks";
@@ -28,7 +31,17 @@ export function App() {
 
   const metrics = useVaultMetrics();
   const position = useUserPosition(address);
-  const withdrawRequest = useWithdrawRequest(address);
+  const pause = usePauseStatus();
+  const { show } = useToast();
+
+  // Celebrate a solver fill (guide §9 FILLED): the request vanishing from the
+  // queue means the USDT already landed in the user's wallet.
+  const onFilled = useCallback(() => {
+    show("Redemption filled — USDT has been sent to your wallet", "success");
+    metrics.refetch();
+    position.refetch();
+  }, [show, metrics, position]);
+  const withdrawRequest = useWithdrawRequest(address, onFilled);
 
   // After any successful write, refresh everything the user can see.
   const refreshAll = useCallback(() => {
@@ -43,6 +56,7 @@ export function App() {
 
       <main className="container">
         <NetworkBanner />
+        <PauseBanner status={pause} />
 
         <div className="hero">
           <h1>Coinchange {VAULT_NAME}</h1>
@@ -84,8 +98,10 @@ export function App() {
                   <DepositPanel
                     signer={signer}
                     address={address}
+                    sharesHeld={position.shares}
                     shareValue={metrics.shareValue}
                     rightChain={rightChain}
+                    paused={pause.depositsPaused}
                     onSuccess={refreshAll}
                   />
                 ) : (
@@ -96,6 +112,7 @@ export function App() {
                     shareValue={metrics.shareValue}
                     unlockAt={position.unlockAt}
                     rightChain={rightChain}
+                    paused={pause.withdrawalsPaused}
                     request={withdrawRequest.request}
                     refetchRequest={withdrawRequest.refetch}
                     onSuccess={refreshAll}

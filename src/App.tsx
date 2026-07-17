@@ -138,11 +138,11 @@ export function App() {
           <span>
             Built on{" "}
             <a
-              href="https://www.npmjs.com/package/boring-vault-ui/v/1.6.1"
+              href="https://www.npmjs.com/package/boring-vault-ui/v/1.6.3"
               target="_blank"
               rel="noreferrer"
             >
-              boring-vault-ui@1.6.1
+              boring-vault-ui@1.6.3
             </a>
           </span>
           <span>Ethereum mainnet · {SHARE_SYMBOL}</span>

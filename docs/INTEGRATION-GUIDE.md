@@ -4,7 +4,7 @@
 > **Reference implementation:** this repository — a complete, production-style React dApp you can run, read, and copy from.
 > **Scope:** the live **Yield Prime (CCUSD)** stablecoin vault on Ethereum mainnet: viewing the vault, depositing USDC/USDT, and redeeming shares through the **AtomicQueue**, which is filled by **Coinchange's own solver service**.
 >
-> Everything in this guide was verified against the deployed mainnet contracts and `boring-vault-ui@1.6.1` as shipped on npm. The contracts implement the audited Se7en-Seas/Veda "Boring Vault" architecture.
+> Everything in this guide was verified against the deployed mainnet contracts and `boring-vault-ui@1.6.3` as shipped on npm. The contracts implement the audited Se7en-Seas/Veda "Boring Vault" architecture.
 
 ---
 
@@ -14,13 +14,13 @@
 2. [Live deployment reference](#2-live-deployment-reference)
 3. [Units, decimals & encoding conventions](#3-units-decimals--encoding-conventions)
 4. [Choosing an integration path](#4-choosing-an-integration-path)
-5. [Path A — integrating with `boring-vault-ui@1.6.1`](#5-path-a--integrating-with-boring-vault-ui161)
+5. [Path A — integrating with `boring-vault-ui@1.6.3`](#5-path-a--integrating-with-boring-vault-ui163)
 6. [Path B — direct contract integration (any stack)](#6-path-b--direct-contract-integration-any-stack)
 7. [The redemption flow in depth (AtomicQueue)](#7-the-redemption-flow-in-depth-atomicqueue)
 8. [The Coinchange solver service — what fills your users' requests](#8-the-coinchange-solver-service--what-fills-your-users-requests)
 9. [Request lifecycle & UI state machine](#9-request-lifecycle--ui-state-machine)
 10. [Error handling & edge cases](#10-error-handling--edge-cases)
-11. [Known `boring-vault-ui@1.6.1` issues and required workarounds](#11-known-boring-vault-ui161-issues-and-required-workarounds)
+11. [Known `boring-vault-ui@1.6.3` issues and required workarounds](#11-known-boring-vault-ui163-issues-and-required-workarounds)
 12. [Production checklist](#12-production-checklist)
 13. [Appendix A — contract reference](#appendix-a--contract-reference)
 14. [Appendix B — reference app file map](#appendix-b--reference-app-file-map)
@@ -124,13 +124,13 @@ Getting units right is most of the work. Pin this table to your wall:
 Two of these deserve emphasis:
 
 - **The queue's discount is /1e6; DelayedWithdraw percentages are /1e4.** If you have integrated other Boring Vaults before, do not carry the bps assumption over.
-- **18-decimal share amounts do not fit in a JS `number`.** Anything above ~0.009 CCUSD exceeds `Number.MAX_SAFE_INTEGER` in base units. Use `bigint` (or decimal strings) everywhere on the share side. This exact mistake exists inside `boring-vault-ui@1.6.1` and is why the patch in [§11](#11-known-boring-vault-ui161-issues-and-required-workarounds) is mandatory.
+- **18-decimal share amounts do not fit in a JS `number`.** Anything above ~0.009 CCUSD exceeds `Number.MAX_SAFE_INTEGER` in base units. Use `bigint` (or decimal strings) everywhere on the share side. This exact mistake existed inside `boring-vault-ui` up to 1.6.2 — every realistic redemption failed client-side — and is why the `>= 1.6.3` version floor in [§11](#11-known-boring-vault-ui163-issues-and-required-workarounds) is mandatory.
 
 ---
 
 ## 4. Choosing an integration path
 
-**Path A — `boring-vault-ui@1.6.1`** (what this repo does). A React context + hook that wraps deposits and queue redemptions. Fastest to production if you are on React + wagmi + ethers v6, *provided* you apply the workarounds in [§11](#11-known-boring-vault-ui161-issues-and-required-workarounds) — one of them (the 18-decimal overflow patch) is a hard requirement without which redemptions do not work at all.
+**Path A — `boring-vault-ui@1.6.3`** (what this repo does). A React context + hook that wraps deposits and queue redemptions. Fastest to production if you are on React + wagmi + ethers v6, *provided* you apply the workarounds in [§11](#11-known-boring-vault-ui163-issues-and-required-workarounds) — one of them (the `>= 1.6.3` version floor; earlier versions have an 18-decimal overflow) is a hard requirement without which redemptions do not work at all.
 
 **Path B — direct contract calls.** The full user surface is only four state-changing calls (two approvals, `teller.deposit`, `queue.safeUpdateAtomicRequest`) plus a handful of views. If you are not on React, not on ethers v6, or simply prefer fewer dependencies, integrating directly with viem/ethers/web3 is entirely reasonable and avoids every library caveat. Section [6](#6-path-b--direct-contract-integration-any-stack) gives complete recipes.
 
@@ -138,14 +138,13 @@ Both paths share sections [7](#7-the-redemption-flow-in-depth-atomicqueue)–[10
 
 ---
 
-## 5. Path A — integrating with `boring-vault-ui@1.6.1`
+## 5. Path A — integrating with `boring-vault-ui@1.6.3`
 
 ### 5.1 Install
 
 ```bash
-npm install boring-vault-ui@1.6.1
+npm install boring-vault-ui@1.6.3
 npm install ethers@^6 viem wagmi @tanstack/react-query bignumber.js connectkit
-npm install -D patch-package
 ```
 
 Pin the version exactly — the library's API has shifted across minor versions. ConnectKit is what this repo uses for wallet UX; any wagmi-compatible connector kit works.
@@ -161,16 +160,9 @@ Three install-time requirements (all are in this repo, ready to copy):
 }
 ```
 
-**(b) Apply the redemption overflow patch.** `queueWithdraw` in 1.6.1 converts the share amount to base units with `BigNumber.toNumber()`. On an 18-decimal share token, any amount above ~0.009 shares exceeds `Number.MAX_SAFE_INTEGER` and ethers v6 throws `overflow … INVALID_ARGUMENT` while encoding the approve — **every realistic redemption fails client-side before the wallet even opens.** Copy `patches/boring-vault-ui+1.6.1.patch` from this repo and wire it up:
+**(b) Never go below 1.6.3 — the redemption overflow floor.** `queueWithdraw` in versions up to 1.6.2 converted the share amount to base units with `BigNumber.toNumber()`. On an 18-decimal share token, any amount above ~0.009 shares exceeds `Number.MAX_SAFE_INTEGER` and ethers v6 throws `overflow … INVALID_ARGUMENT` while encoding the approve — **every realistic redemption fails client-side before the wallet even opens.** Upstream fixed this in 1.6.3 (commit `523c8ab`, "Better large number handling": amounts pass as decimal strings via `toFixed(0)`). This repo guards the floor with a regression test (`npm run test:withdraw`, `scripts/queue-withdraw-regression.cjs`) that drives the real compiled `queueWithdraw` against a mock transport and asserts the on-wire calldata carries the full 18-decimal amount — run it in CI so a dependency change can never silently reintroduce the overflow.
 
-```jsonc
-// package.json
-{
-  "scripts": { "postinstall": "patch-package" }
-}
-```
-
-The patch passes the amount as a decimal string (`toFixed(0)`) and compares the allowance as `BigInt`. This repo guards it with a regression test (`npm run test:withdraw`, `scripts/queue-withdraw-regression.cjs`) that drives the real compiled `queueWithdraw` against a mock transport and asserts the on-wire calldata carries the full 18-decimal amount — run it in CI so a lockfile refresh can never silently drop the patch.
+One residual sharp edge survives in 1.6.3 (through at least 1.9.13): the pre-approve allowance check still compares as floats (`Number(allowance) < amount.toNumber()`). It cannot throw; the worst case is a float-epsilon misjudgment that skips the approve and lets `safeUpdateAtomicRequest` revert on-chain — recoverable, no fund risk.
 
 **(c) Respect the package `exports` map.** Only two import specifiers resolve: `"boring-vault-ui"` (→ `BoringVaultV1Provider`, `useBoringVaultV1`, `DepositButton`) and `"boring-vault-ui/types"` (→ the TypeScript interfaces). Every `boring-vault-ui/dist/...` deep path is blocked under Vite/webpack 5/esbuild. Keep the imports behind one module (`src/lib/boringVault.ts` here) so a future packaging change is a one-line fix.
 
@@ -234,7 +226,7 @@ const { deposit, depositStatus } = useBoringVaultV1();
 await deposit(signer, "100.5", USDC);   // amount is a HUMAN-READABLE string
 ```
 
-What happens (verified in the 1.6.1 source and the Teller contract):
+What happens (verified in the 1.6.3 source and the Teller contract):
 
 1. Checks the user's USDC/USDT allowance **to the BoringVault address** (the vault, *not* the Teller — the vault pulls funds in `BoringVault.enter`). If insufficient → prompts `approve(vault, amount)`.
 2. Calls `teller.deposit(asset, amount, 0)`. Shares are minted to the user at `amount × 10^18 / getRateInQuoteSafe(asset)`.
@@ -257,7 +249,7 @@ await queueWithdraw(
 );
 ```
 
-What happens (verified, with the §5.1 patch applied):
+What happens (verified against the 1.6.3 source):
 
 1. Checks CCUSD allowance to the **AtomicQueue**; if insufficient → prompts `vault.approve(queue, shares)` for the exact amount.
 2. Computes `deadline = now + daysValid × 86400` and `discount = discountPercent × 10⁴` (ppm).
@@ -506,20 +498,20 @@ The accountant auto-pauses if a rate update falls outside its bounds — pauses 
 
 ---
 
-## 11. Known `boring-vault-ui@1.6.1` issues and required workarounds
+## 11. Known `boring-vault-ui@1.6.3` issues and required workarounds
 
-Consolidated. Items 1–2 are **blocking** for this vault; the rest cause subtle breakage. This repo carries a ready-made workaround for each.
+Consolidated. Items 1 and 8 were fixed upstream in 1.6.3 (the version this repo pins) and stay listed as **version-floor guards**; item 2 is **blocking** for this vault; the rest cause subtle breakage. This repo carries a ready-made workaround for each. (Whether any later version fixes the rest is analyzed in [`docs/research/boring-vault-ui-upgrade-analysis.md`](research/boring-vault-ui-upgrade-analysis.md) — as of 1.9.13, none does.)
 
 | # | Issue | Impact on this vault | Workaround (in this repo) |
 |---|---|---|---|
-| 1 | `queueWithdraw` converts share amounts with `BigNumber.toNumber()` — unsafe above `Number.MAX_SAFE_INTEGER` | **Every redemption > ~0.009 CCUSD fails client-side** (ethers v6 `overflow INVALID_ARGUMENT`) | `patches/boring-vault-ui+1.6.1.patch` via `patch-package` (postinstall); regression-tested by `npm run test:withdraw` |
+| 1 | `queueWithdraw` in ≤ 1.6.2 converts share amounts with `BigNumber.toNumber()` — unsafe above `Number.MAX_SAFE_INTEGER` | **Every redemption > ~0.009 CCUSD fails client-side** (ethers v6 `overflow INVALID_ARGUMENT`) | Fixed upstream in 1.6.3 — never install below it; regression-guarded by `npm run test:withdraw` ([§5.1(b)](#51-install)) |
 | 2 | `withdrawQueueCancel` calls the admin-gated raw `updateAtomicRequest` | Cancel always reverts for end users | Stop pattern: revoke share approval ([§7.4](#74-stopping-a-request)) |
 | 3 | `withdrawQueueStatuses` reads the Seven Seas indexer | Always `[]` — this vault isn't indexed there | On-chain read: `getUserAtomicRequest` (`src/hooks/useWithdrawRequest.ts`) |
 | 4 | `useEthersSigner` not exported; all `dist/…` deep imports blocked by the `exports` map | Import errors / unreachable code | Local adapter `src/lib/useEthersSigner.ts`; single import boundary `src/lib/boringVault.ts` |
 | 5 | Duplicate `@wagmi/core` (library pins an old range) | Type errors; wallet connects but hooks don't see it | `"overrides": { "@wagmi/core": "2.22.1" }` |
 | 6 | One shared `withdrawStatus` object across all withdraw actions | Concurrent actions overwrite each other's status | Track which action is in flight in component state |
 | 7 | `deposit` passes `minimumMint = 0` | No slippage floor (low risk here: NAV moves ≤ +0.1%/h) | Accept, or deposit directly with a computed floor ([§6.3](#63-deposit-direct)) |
-| 8 | Deposit path also uses `.toNumber()` | Latent only — USDC/USDT are 6-decimal, values stay safe | Revisit before ever adding an 18-decimal deposit token |
+| 8 | Deposit path in ≤ 1.6.2 also used `.toNumber()` | Latent only — USDC/USDT are 6-decimal, values stay safe | Fixed upstream in 1.6.3 (same commit as #1); the float allowance-compare residual of [§5.1(b)](#51-install) applies |
 | 9 | Prebuilt components: only `DepositButton` is importable; it drags in Chakra UI | Deep-path component imports fail | Build custom UI off the hook (this whole repo is the example) |
 
 ---
@@ -527,8 +519,8 @@ Consolidated. Items 1–2 are **blocking** for this vault; the rest cause subtle
 ## 12. Production checklist
 
 **Install & build**
-- [ ] `boring-vault-ui` pinned to exactly `1.6.1`; re-validate everything on any upgrade.
-- [ ] `patch-package` wired into `postinstall`; **`npm run test:withdraw` green in CI** (guards issue #1 — without it redemptions are broken).
+- [ ] `boring-vault-ui` pinned to exactly `1.6.3` (never below — issue #1); re-validate everything on any upgrade.
+- [ ] **`npm run test:withdraw` green in CI** (guards issue #1 — without the 1.6.3 fix redemptions are broken).
 - [ ] Single `@wagmi/core` in the lockfile (`find node_modules -path "*@wagmi/core/package.json"` → exactly one).
 - [ ] Imports only from `"boring-vault-ui"` and `"boring-vault-ui/types"`.
 
@@ -682,8 +674,7 @@ function checkUserDeposit(address account, ERC20 depositAsset, uint256 depositAm
 | `src/components/DepositPanel.tsx` | Full deposit UX: validation, confirm dialog, share-lock notice |
 | `src/components/WithdrawPanel.tsx` | Full redemption UX: spread/validity controls, replace notice, Stop |
 | `src/components/RequestRow.tsx` | Request state rendering (open/filling/stopped/expired) |
-| `patches/boring-vault-ui+1.6.1.patch` | The mandatory redemption fix (issue #1) |
-| `scripts/queue-withdraw-regression.cjs` | CI guard that the patch is applied and effective |
+| `scripts/queue-withdraw-regression.cjs` | CI guard that the 1.6.3 overflow fix is present and effective (issue #1) |
 
 Run it: `npm install && npm run dev` (optionally set `VITE_RPC_URL` / `VITE_WALLETCONNECT_PROJECT_ID`, see `.env.example`). Reads work with no wallet.
 
@@ -705,4 +696,4 @@ If you are integrating the WBTC vault, contact Coinchange for that vault's addre
 
 ---
 
-*Guide compiled 2026-07-17 against the deployed mainnet contracts (addresses in §2, verified via RPC) and the published `boring-vault-ui@1.6.1` npm artifact. When in doubt, the deployed bytecode and the reference implementation in this repository are the ground truth.*
+*Guide compiled 2026-07-17 against the deployed mainnet contracts (addresses in §2, verified via RPC) and the published `boring-vault-ui@1.6.3` npm artifact. When in doubt, the deployed bytecode and the reference implementation in this repository are the ground truth.*

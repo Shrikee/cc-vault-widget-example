@@ -1,4 +1,4 @@
-// Regression test for patches/boring-vault-ui+1.6.1.patch (run: npm run test:withdraw)
+// Regression test for the queueWithdraw 18-decimal overflow (run: npm run test:withdraw)
 //
 // boring-vault-ui@1.6.1's queueWithdraw converted the share amount to base
 // units with BigNumber.toNumber(). For an 18-decimal vault like CCUSD, any
@@ -6,7 +6,9 @@
 // rejects unsafe JS numbers while ABI-encoding the approve call:
 //   overflow (argument="value", value=10000000000000000000, code=INVALID_ARGUMENT)
 // so every realistic redemption request failed before the wallet even opened.
-// The patch passes the amount as a decimal string (toFixed(0)) instead.
+// Upstream fixed this in 1.6.3 (commit 523c8ab "Better large number handling":
+// decimal strings via toFixed(0)); we depend on that version. This test guards
+// against any dependency change that would reintroduce the overflow.
 //
 // This drives the REAL compiled queueWithdraw — the exact code the dApp runs —
 // with a minimal hook dispatcher standing in for React (the dist only uses
@@ -16,8 +18,8 @@
 //
 // PASS (exit 0): withdrawStatus.success, two txs broadcast, on-wire calldata
 //   carries approve/offerAmount of exactly 10n * 10n**18n.
-// FAIL (exit 1): the original overflow — i.e. the patch is not applied
-//   (e.g. `npm install` ran without the postinstall patch-package hook).
+// FAIL (exit 1): the original overflow is back — i.e. boring-vault-ui was
+//   downgraded below 1.6.3 or a regression shipped upstream.
 "use strict";
 const path = require("path");
 const fs = require("fs");
@@ -226,8 +228,8 @@ async function main() {
   const finalStatus = capturedValue().withdrawStatus;
 
   if (finalStatus.error && /overflow/.test(finalStatus.error)) {
-    quiet.error(`FAIL: queueWithdraw still overflows (patch not applied?): ${finalStatus.error}`);
-    quiet.error("Run `npx patch-package` (or `npm install`, which runs it via postinstall).");
+    quiet.error(`FAIL: queueWithdraw overflows on 18-decimal amounts: ${finalStatus.error}`);
+    quiet.error("boring-vault-ui must be >= 1.6.3 (upstream fix commit 523c8ab). Check the installed version.");
     process.exit(1);
   }
   if (!finalStatus.success) {

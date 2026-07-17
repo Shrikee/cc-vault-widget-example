@@ -3,19 +3,18 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "End-user dApp for the Coinchange Boring Vault (WBTC, delayed-withdraw) built on boring-vault-ui@1.6.1",
+  "description": "End-user dApp for the Coinchange Boring Vault (WBTC, delayed-withdraw) built on boring-vault-ui@1.6.3",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "postinstall": "patch-package",
     "test:withdraw": "node scripts/queue-withdraw-regression.cjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.16",
     "bignumber.js": "^9.1.2",
-    "boring-vault-ui": "1.6.1",
+    "boring-vault-ui": "1.6.3",
     "connectkit": "^1.8.2",
     "ethers": "^6.13.4",
     "react": "^18.3.1",
@@ -27,7 +26,6 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
-    "patch-package": "^8.0.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.10"
   },

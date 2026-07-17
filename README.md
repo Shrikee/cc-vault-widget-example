@@ -3,13 +3,13 @@
 A production-style, fully custom frontend for the **Coinchange Yield Prime**
 vault — a USD stablecoin vault on Ethereum mainnet whose share token is
 **CCUSD** (`name: "Yield Prime"`, 18 decimals) — built on
-[`boring-vault-ui@1.6.1`](https://www.npmjs.com/package/boring-vault-ui/v/1.6.1).
+[`boring-vault-ui@1.6.3`](https://www.npmjs.com/package/boring-vault-ui/v/1.6.3).
 
 > **📖 Integrating this vault into your own frontend?** Start with the
 > [**Integration Guide**](./docs/INTEGRATION-GUIDE.md) — a comprehensive,
 > contract-verified walkthrough of the deposit and AtomicQueue redemption flows,
 > the Coinchange solver service that fills redemptions, both library-based and
-> direct-contract integration paths, and every known `boring-vault-ui@1.6.1`
+> direct-contract integration paths, and every known `boring-vault-ui@1.6.3`
 > caveat with its workaround. This repository is the reference implementation
 > that guide points into.
 
@@ -31,7 +31,7 @@ validation, and error states are fully under our control.
 - **React 18 + TypeScript + Vite**
 - **wagmi + viem + ConnectKit** — wallet connection
 - **ethers v6** — read provider + signer for writes
-- **`boring-vault-ui@1.6.1`** — `BoringVaultV1Provider` + `useBoringVaultV1()`
+- **`boring-vault-ui@1.6.3`** — `BoringVaultV1Provider` + `useBoringVaultV1()`
 
 ## Run it
 
@@ -126,7 +126,7 @@ Checked against the live contracts with `cast`:
 
 ## Library notes / caveats
 
-These are properties of `boring-vault-ui@1.6.1` itself, carried over and
+These are properties of `boring-vault-ui@1.6.3` itself, carried over and
 re-confirmed for this vault:
 
 1. **`useEthersSigner` is not importable from the package.** The `exports` map
@@ -142,12 +142,14 @@ re-confirmed for this vault:
    contract and then calls `teller.deposit(...)`; our confirm dialog reflects
    that. Redemption approves **CCUSD shares to the AtomicQueue**.
 
-4. **18-decimal precision caveat (now relevant).** Internally the library does
-   `BigNumber(amount).multipliedBy(10**vaultDecimals).toNumber()` for the
-   share-side of `queueWithdraw`/approval. CCUSD is **18-decimal**, so that
-   `.toNumber()` exceeds JS safe-integer range and rounds in the least
-   significant wei — immaterial dust for a redemption request, but noted.
-   Deposits use 6-decimal USDC/USDT amounts and are unaffected.
+4. **18-decimal version floor: never below 1.6.3.** Up to 1.6.2 the library
+   converted share amounts with `BigNumber(...).toNumber()`; on 18-decimal
+   CCUSD anything above ~0.009 shares overflows and ethers v6 rejects the
+   encode, so every realistic redemption failed client-side. 1.6.3 passes
+   amounts as decimal strings (`toFixed(0)`), verified exact on-wire by
+   `npm run test:withdraw`. Residual: the pre-approve allowance check still
+   compares as floats — worst case it skips the approve and the request
+   reverts on-chain (recoverable).
 
 5. **`withdrawQueueStatuses` → Seven Seas only.** The library reads open queue
    requests from `api.sevenseas.capital`, which does not index this vault. We

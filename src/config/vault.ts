@@ -3,19 +3,15 @@ import type { Token } from "../lib/boringVault";
 // =============================================================================
 // Coinchange "Yield Prime" vault — production parameters (Ethereum mainnet).
 //
-// Source of truth:
-//   • boring-vault/deployments/Coinchange24hVaultDeploy.json  (core stack)
-//   • boring-vault/deployments/Coinchange24hSolverDeploy.json  (AtomicQueue)
-//   • boring-vault/script/ArchitectureDeployments/Mainnet/Deploy24hVault.s.sol
 // Verified on-chain (2026-06-26): vault.symbol()="CCUSD", name()="Yield Prime",
 //   decimals()=18; accountant.getRate()=1e6 (1 share ≈ 1 USDT); AtomicQueue
 //   safeUpdateAtomicRequest is a public capability.
 //
-// VERIFY these against the deployment files before each release — addresses
+// VERIFY these against the live contracts before each release — addresses
 // change when a vault is redeployed.
 //
 // NOTE on the withdraw model: this vault redeems via the audited AtomicQueue
-// (ADR-0005, solver-priced). The DelayedWithdraw contract is deployed but left
+// (solver-priced). The DelayedWithdraw contract is deployed but left
 // UNUSED (allowPublicWithdraws=false), so the frontend uses the queue flow.
 // =============================================================================
 

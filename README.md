@@ -19,12 +19,11 @@ USDT; no separate claim step). The library's prebuilt Chakra components are
 **not** used — the UI is built directly on `useBoringVaultV1()` so branding,
 validation, and error states are fully under our control.
 
-> **Withdraw model.** Unlike the Coinchange WBTC vault (delayed-withdraw), this
-> vault's `DelayedWithdraw` contract is deployed but **unused**
-> (`allowPublicWithdraws=false`). Redemption is solver-priced over the audited
-> AtomicQueue (ADR-0005), so the frontend wires the provider's
-> `withdrawQueueContract` and uses the `queueWithdraw` flow (integration doc
-> §10.2).
+> **Withdraw model.** This vault's `DelayedWithdraw` contract is deployed but
+> **unused** (`allowPublicWithdraws=false`). Redemption is solver-priced over
+> the audited AtomicQueue, so the frontend wires the provider's
+> `withdrawQueueContract` and uses the `queueWithdraw` flow (see the
+> [Integration Guide](./docs/INTEGRATION-GUIDE.md)).
 
 ## Stack
 
@@ -58,8 +57,8 @@ renders for anonymous visitors straight off the public RPC.
 
 ## Deployed addresses (Ethereum mainnet)
 
-Source: `boring-vault/deployments/Coinchange24hVaultDeploy.json` +
-`Coinchange24hSolverDeploy.json`. Mirrored in `src/config/vault.ts`.
+Defined in `src/config/vault.ts` and verified against the live contracts
+(see [On-chain verification](#on-chain-verification-2026-06-26) below).
 
 | Contract | Address |
 |---|---|

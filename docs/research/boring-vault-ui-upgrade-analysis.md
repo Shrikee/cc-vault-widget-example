@@ -2,7 +2,9 @@
 
 - **Date:** 2026-07-17
 - **Version range analyzed:** `1.6.1` (2024-07-25) → `1.9.13` (2025-10-31, current `latest`)
-- **Question:** for each shortcoming/workaround documented in [`docs/INTEGRATION-GUIDE.md` §11](../INTEGRATION-GUIDE.md#11-known-boring-vault-ui161-issues-and-required-workarounds), is it fixed in a later published version?
+- **Question:** for each shortcoming/workaround documented in [`docs/INTEGRATION-GUIDE.md` §11](../INTEGRATION-GUIDE.md#11-known-boring-vault-ui163-issues-and-required-workarounds), is it fixed in a later published version?
+
+> **Point-in-time snapshot.** This analysis was written against the repo as it stood *before* the upgrade it recommends: pinned to `1.6.1` with `patches/boring-vault-ui+1.6.1.patch` applied via `patch-package`. The repo has since adopted Option A (pinned `1.6.3`, patch and `patch-package` removed), so statements below about "our patch", the `patches/` file, and the guide pinning `1.6.1` describe that pre-upgrade state, kept as the evidence trail for the decision.
 - **Method:** primary sources only — npm registry metadata, the published tarballs themselves (`npm pack`, extracted and inspected under `/Users/romanholubovskyi/.claude/jobs/efaef36b/tmp/bvui/<version>/`), and the package's own GitHub repository ([Veda-Labs/boring-vault-ui](https://github.com/Veda-Labs/boring-vault-ui), formerly `Se7en-Seas/boring-vault-ui`; npm publishes **no** `repository` field, the repo was located via GitHub search). Every verdict below was verified in the shipped `dist/` code of the relevant tarball, not just commit messages.
 
 ## TL;DR — should we upgrade?

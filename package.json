@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "End-user dApp for the Coinchange Boring Vault (WBTC, delayed-withdraw) built on boring-vault-ui@1.6.3",
+  "description": "End-user dApp for the Coinchange Yield Prime (CCUSD) Boring Vault with AtomicQueue redemptions, built on boring-vault-ui@1.6.3",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

@@ -51,6 +51,10 @@ export interface PauseStatus {
   depositsPaused: boolean;
   withdrawalsPaused: boolean;
   anyPaused: boolean;
+  // When the accountant last posted a share price, in unix seconds; null until
+  // the first poll resolves (or if it never has). Read off the accountantState()
+  // poll above, so it costs no extra request and is at most 30 s stale.
+  lastRateUpdateAt: number | null;
 }
 
 export function usePauseStatus(): PauseStatus {
@@ -81,6 +85,14 @@ export function usePauseStatus(): PauseStatus {
   const accountantPaused = data?.[1]?.result?.[8] === true;
   const queuePaused = data?.[2]?.result === true;
 
+  // Field index 7 of the struct is lastUpdateTimestamp — the moment the
+  // accountant last posted a share price. The uint64 arrives as a bigint; 0
+  // means none has ever been posted, which is no more knowable than an
+  // unresolved poll, so both collapse to null and the caller omits the badge.
+  const lastUpdate = data?.[1]?.result?.[7];
+  const lastRateUpdateAt =
+    lastUpdate === undefined || lastUpdate === 0n ? null : Number(lastUpdate);
+
   return {
     tellerPaused,
     accountantPaused,
@@ -88,5 +100,6 @@ export function usePauseStatus(): PauseStatus {
     depositsPaused: tellerPaused || accountantPaused,
     withdrawalsPaused: queuePaused || accountantPaused,
     anyPaused: tellerPaused || accountantPaused || queuePaused,
+    lastRateUpdateAt,
   };
 }

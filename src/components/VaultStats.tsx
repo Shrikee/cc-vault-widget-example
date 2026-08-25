@@ -5,23 +5,36 @@ import {
   SHARE_SYMBOL,
 } from "../config/vault";
 import { formatAmount, formatUsd, shortAddress } from "../lib/format";
+import { formatDateTime } from "../lib/time";
 import type { VaultMetrics } from "../hooks/useVaultMetrics";
 import type { ShareHistory } from "../hooks/useShareHistory";
 import { ApyHero } from "./ApyHero";
-import { Card, InlineError, Stat } from "./ui";
+import { Badge, Card, InlineError, Stat } from "./ui";
 
 export function VaultStats({
   metrics,
   history,
+  lastRateUpdateAt,
 }: {
   metrics: VaultMetrics;
   history: ShareHistory;
+  lastRateUpdateAt: number | null;
 }) {
   const { tvl, shareValue, error } = metrics;
   const baseSymbol = BASE_ASSET.displayName ?? "USDT";
 
   return (
-    <Card title="Vault overview" subtitle="Live on-chain metrics">
+    <Card
+      title="Vault overview"
+      subtitle="Live on-chain metrics"
+      right={
+        // Tells the visitor how fresh the APY and share price are. Omitted
+        // until the accountant's last share-price update is known.
+        lastRateUpdateAt === null ? null : (
+          <Badge tone="neutral">as of {formatDateTime(lastRateUpdateAt)}</Badge>
+        )
+      }
+    >
       <ApyHero history={history} metrics={metrics} />
 
       <div className="stat-grid">

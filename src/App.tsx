@@ -124,7 +124,11 @@ export function App() {
             </div>
 
             <aside className="layout__side">
-              <VaultStats metrics={metrics} history={history} />
+              <VaultStats
+                metrics={metrics}
+                history={history}
+                lastRateUpdateAt={pause.lastRateUpdateAt}
+              />
               <PositionCard
                 connected={isConnected}
                 shares={position.shares}

@@ -59,3 +59,21 @@ export function fmtPct(value: number | null | undefined): string {
   const magnitude = `${Math.abs(value).toFixed(2)}%`;
   return Number(value.toFixed(2)) < 0 ? `−${magnitude}` : magnitude;
 }
+
+// Earnings: a signed USD figure — "+$12.34" / "−$0.20" / "$0.00", always 2 dp,
+// with a true minus (U+2212) and "—" when there is no figure. As in fmtPct the
+// sign comes from the *rounded* value, so a gain of a tenth of a cent reads
+// "$0.00" rather than "+$0.00".
+export function fmtSignedUsd(value: number | null | undefined): string {
+  if (value === undefined || value === null || Number.isNaN(value)) return "—";
+  const rounded = Number(value.toFixed(2));
+  const magnitude = Math.abs(value).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  if (rounded > 0) return `+${magnitude}`;
+  if (rounded < 0) return `−${magnitude}`;
+  return magnitude;
+}

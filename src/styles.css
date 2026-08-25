@@ -784,3 +784,17 @@ a:hover {
   font-size: 0.82rem;
   color: var(--text-muted);
 }
+
+/* ---------- earnings sub-line (position card) ---------- */
+.earnings {
+  font-weight: 700;
+}
+.earnings--up {
+  color: var(--success);
+}
+.earnings--down {
+  color: var(--danger);
+}
+.earnings--flat {
+  color: var(--text-dim);
+}

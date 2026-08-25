@@ -44,3 +44,6 @@ docs/adr/
 docs/research/
 docs/wayfinder/
 src/prototype/
+
+# Agent worktrees created by the Claude Code harness
+.claude/worktrees/

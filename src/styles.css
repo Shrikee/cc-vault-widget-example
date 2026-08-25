@@ -179,6 +179,34 @@ a:hover {
   color: var(--text-muted);
 }
 
+/* ---------- realised trailing APY hero ---------- */
+.apy-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.apy-hero__value {
+  font-size: 2.4rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--accent);
+}
+.apy-hero__value--negative {
+  color: var(--danger);
+}
+.apy-hero__value--muted {
+  color: var(--text-muted);
+}
+.apy-hero__hint {
+  margin: 0;
+}
+.apy-hero__footnote {
+  margin: 2px 0 16px;
+}
+
 .kv {
   display: flex;
   flex-wrap: wrap;

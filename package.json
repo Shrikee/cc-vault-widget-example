@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "test:apy": "node scripts/apy-vectors.mjs",
     "test:withdraw": "node scripts/queue-withdraw-regression.cjs"
   },
   "dependencies": {

@@ -49,3 +49,13 @@ export function parseAmount(input: string): number | null {
   if (!Number.isFinite(n) || n <= 0) return null;
   return n;
 }
+
+// Realised trailing APY: 2 dp, signed with a true minus (U+2212), never
+// clamped — a negative window is a real result. "—" when no figure exists.
+export function fmtPct(value: number | null | undefined): string {
+  if (value === undefined || value === null || Number.isNaN(value)) return "—";
+  // Round first, then sign: a value that rounds to zero is "0.00%", never
+  // "−0.00%".
+  const magnitude = `${Math.abs(value).toFixed(2)}%`;
+  return Number(value.toFixed(2)) < 0 ? `−${magnitude}` : magnitude;
+}

@@ -6,14 +6,24 @@ import {
 } from "../config/vault";
 import { formatAmount, formatUsd, shortAddress } from "../lib/format";
 import type { VaultMetrics } from "../hooks/useVaultMetrics";
+import type { ShareHistory } from "../hooks/useShareHistory";
+import { ApyHero } from "./ApyHero";
 import { Card, InlineError, Stat } from "./ui";
 
-export function VaultStats({ metrics }: { metrics: VaultMetrics }) {
+export function VaultStats({
+  metrics,
+  history,
+}: {
+  metrics: VaultMetrics;
+  history: ShareHistory;
+}) {
   const { tvl, shareValue, error } = metrics;
   const baseSymbol = BASE_ASSET.displayName ?? "USDT";
 
   return (
     <Card title="Vault overview" subtitle="Live on-chain metrics">
+      <ApyHero history={history} metrics={metrics} />
+
       <div className="stat-grid">
         <Stat
           label="Total value locked"
@@ -57,6 +67,11 @@ export function VaultStats({ metrics }: { metrics: VaultMetrics }) {
       </dl>
 
       <InlineError>{error}</InlineError>
+      <InlineError>
+        {history.status === "error"
+          ? `Couldn't load share-price history: ${history.error}`
+          : null}
+      </InlineError>
     </Card>
   );
 }

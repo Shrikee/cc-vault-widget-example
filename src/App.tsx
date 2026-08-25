@@ -3,6 +3,7 @@ import { useAccount } from "wagmi";
 
 import { useBoringVaultV1, useEthersSigner } from "./lib/boringVault";
 import { useVaultMetrics } from "./hooks/useVaultMetrics";
+import { useShareHistory } from "./hooks/useShareHistory";
 import { useUserPosition } from "./hooks/useUserPosition";
 import { useWithdrawRequest } from "./hooks/useWithdrawRequest";
 import { usePauseStatus } from "./hooks/usePauseStatus";
@@ -30,6 +31,7 @@ export function App() {
   const [tab, setTab] = useState<Tab>("deposit");
 
   const metrics = useVaultMetrics();
+  const history = useShareHistory();
   const position = useUserPosition(address);
   const pause = usePauseStatus();
   const { show } = useToast();
@@ -122,7 +124,7 @@ export function App() {
             </div>
 
             <aside className="layout__side">
-              <VaultStats metrics={metrics} />
+              <VaultStats metrics={metrics} history={history} />
               <PositionCard
                 connected={isConnected}
                 shares={position.shares}

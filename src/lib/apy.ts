@@ -161,10 +161,17 @@ export function reconstructDeposits(
     if (log.kind === "refund") refunded.add(log.nonce);
   }
 
+  // A nonce identifies one deposit, so it is counted once however many times
+  // it appears: overlapping block ranges (a tail scan resuming from a cursor
+  // that moved backwards) must not inflate the average deposit cost.
+  const counted = new Set<string>();
+
   let deposited = 0;
   let sharesMinted = 0;
   for (const log of logs) {
     if (log.kind !== "deposit" || refunded.has(log.nonce)) continue;
+    if (counted.has(log.nonce)) continue;
+    counted.add(log.nonce);
     const decimals = decimalsByAsset[log.asset.toLowerCase()];
     if (decimals === undefined) throw new Error(UNKNOWN_DEPOSIT_ASSET);
     deposited += Number(log.depositAmount) / 10 ** decimals;

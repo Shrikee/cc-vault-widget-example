@@ -815,3 +815,17 @@ a:hover {
   opacity: 0.45;
   cursor: default;
 }
+
+/* ---------- earnings sub-line (position card) ---------- */
+.earnings {
+  font-weight: 700;
+}
+.earnings--up {
+  color: var(--success);
+}
+.earnings--down {
+  color: var(--danger);
+}
+.earnings--flat {
+  color: var(--text-dim);
+}

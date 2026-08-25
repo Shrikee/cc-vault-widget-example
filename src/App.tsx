@@ -5,6 +5,7 @@ import { useBoringVaultV1, useEthersSigner } from "./lib/boringVault";
 import { useVaultMetrics } from "./hooks/useVaultMetrics";
 import { useShareHistory } from "./hooks/useShareHistory";
 import { useUserPosition } from "./hooks/useUserPosition";
+import { useDepositHistory } from "./hooks/useDepositHistory";
 import { useWithdrawRequest } from "./hooks/useWithdrawRequest";
 import { usePauseStatus } from "./hooks/usePauseStatus";
 import { useNow } from "./hooks/useNow";
@@ -36,6 +37,7 @@ export function App() {
   const metrics = useVaultMetrics();
   const history = useShareHistory();
   const position = useUserPosition(address);
+  const depositHistory = useDepositHistory(address, position.unlockAt);
   const pause = usePauseStatus();
   const { show } = useToast();
   // The headline APY — the realised trailing APY over the 7-day window. The
@@ -69,7 +71,10 @@ export function App() {
     metrics.refetch();
     position.refetch();
     withdrawRequest.refetch();
-  }, [metrics, position, withdrawRequest]);
+    // The wallet's own deposit is the only thing that moves its average deposit
+    // cost: one tail chunk, never a poll.
+    depositHistory.refetchTail();
+  }, [metrics, position, withdrawRequest, depositHistory.refetchTail]);
 
   return (
     <div className="app">
@@ -154,6 +159,7 @@ export function App() {
                 shares={position.shares}
                 shareValue={metrics.shareValue}
                 unlockAt={position.unlockAt}
+                depositHistory={depositHistory}
               />
               <HowItWorks />
             </aside>

@@ -1,20 +1,43 @@
-// Test vectors for the realised trailing APY derivation (run: npm run test:apy)
+// Test vectors for the yield figures' pure seams (run: npm run test:apy)
 //
-// Drives the real pure module src/lib/apy.ts — the same code the widget runs —
-// against the spec's vectors (docs/wayfinder/apy/spec.md §9). No network, no
-// framework, no dependencies: Node imports the TypeScript module directly.
+// Drives the real modules src/lib/apy.ts and src/lib/scanRuns.ts — the same
+// code the widget runs — against the spec (docs/wayfinder/apy/spec.md §5, §9).
+// No network, no framework, no dependencies: Node imports the TypeScript
+// modules directly.
 //
 // PASS (exit 0): every vector matches the spec.
 // FAIL (exit 1): the derivation drifted from the spec.
-import { UNKNOWN_DEPOSIT_ASSET, apyHint, computeEarnings, computeWindowApy, decodeDepositLog, reconstructDeposits, trailingWindowHint } from "../src/lib/apy.ts";
-import { fmtPct, fmtSignedUsd } from "../src/lib/format.ts";
-import { DEPLOY_TIMESTAMP } from "../src/config/history.ts";
+import {
+  UNKNOWN_DEPOSIT_ASSET,
+  apyHint,
+  computeEarnings,
+  computeWindowApy,
+  decodeDepositLog,
+  projectEarnings,
+  reconstructDeposits,
+  trailingWindowHint,
+} from "../src/lib/apy.ts";
+import { fmtPct, fmtSignedUsd, formatUsd } from "../src/lib/format.ts";
+import {
+  DEPLOY_TIMESTAMP,
+  TOPIC_DEPOSIT,
+  TOPIC_DEPOSIT_REFUNDED,
+} from "../src/config/history.ts";
+import {
+  NO_SCANS,
+  abandonScan,
+  forgetScans,
+  isCurrent,
+  requestTail,
+  settleScan,
+  startScan,
+} from "../src/lib/scanRuns.ts";
 
 // The real share-price series: 28 ExchangeRateUpdated events emitted by the
 // accountant between deployment and 2026-08-25T13:06:47Z, inlined from
 // docs/research/apy-share-price-history.csv (git-ignored) so the vectors run in
-// a fresh clone. Columns: block, event currentTime, oldRate, newRate (uint96,
-// USDT 6 dp).
+// a fresh clone. Columns: block, event currentTime, and the share price before
+// and after the update (uint96 base-asset units, USDT 6 dp).
 const SERIES = [
   [25430365, "2026-06-30T12:02:11.000Z", 1000000, 998617],
   [25433855, "2026-06-30T23:43:23.000Z", 998617, 998693],
@@ -46,17 +69,21 @@ const SERIES = [
   [25832405, "2026-08-25T13:06:47.000Z", 1000902, 1001004],
 ];
 
-// Rates are uint96 base-asset units (USDT, 6 dp): 1_001_004 ⇒ 1.001004.
-const EVENTS = SERIES.map(([block, iso, oldRate, newRate], i) => ({
+// Share prices are uint96 base-asset units (USDT, 6 dp): 1_001_004 ⇒ 1.001004.
+const EVENTS = SERIES.map(([block, iso, before, after], i) => ({
   block,
   logIndex: i,
   time: Math.floor(Date.parse(iso) / 1000),
-  oldRate: oldRate / 1e6,
-  newRate: newRate / 1e6,
+  oldPrice: before / 1e6,
+  newPrice: after / 1e6,
 }));
 
 const at = (iso) => Math.floor(Date.parse(iso) / 1000);
-const SHARE_PRICE = 1.001004; // accountant.getRate() at 2026-08-25T13:06:47Z
+// The series a scan holds at a given moment: it reaches the head block, so it
+// ends at `now`. Replaying an earlier `now` against the whole recorded history
+// has to truncate it the same way (spec §5.3).
+const seriesAt = (now) => EVENTS.filter((e) => e.time <= now);
+const SHARE_PRICE = 1.001004; // the share price at 2026-08-25T13:06:47Z
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -75,8 +102,8 @@ function near(name, actual, expected, tol = 5e-4) {
 }
 
 // --- §9: 7d APY — the headline window ---------------------------------------
-// now 2026-08-25T15:00:00Z ⇒ rStart 0.999821 (oldRate of the first event inside
-// the trailing window) ⇒ 6.1696 % ⇒ "6.17%".
+// now 2026-08-25T15:00:00Z ⇒ startPrice 0.999821 (the share price before the
+// first update inside the trailing window) ⇒ 6.1696 % ⇒ "6.17%".
 {
   const w = computeWindowApy(EVENTS, SHARE_PRICE, at("2026-08-25T15:00:00Z"), 7);
   console.log("7d APY (spec §9)");
@@ -94,7 +121,7 @@ function near(name, actual, expected, tol = 5e-4) {
 // why its figure is a third of the 7d one.
 {
   const w = computeWindowApy(EVENTS, SHARE_PRICE, at("2026-08-25T15:00:00Z"), 3);
-  console.log("3d APY (spec §9) — rStart 1.000497");
+  console.log("3d APY (spec §9) — startPrice 1.000497");
   check("label", w.label, "3d APY");
   check("days", w.days, 3);
   near("apyPct", w.apyPct, 6.1654);
@@ -102,7 +129,7 @@ function near(name, actual, expected, tol = 5e-4) {
 }
 {
   const w = computeWindowApy(EVENTS, SHARE_PRICE, at("2026-08-25T15:00:00Z"), 30);
-  console.log("30d APY (spec §9) — rStart 0.999596");
+  console.log("30d APY (spec §9) — startPrice 0.999596");
   check("label", w.label, "30d APY");
   check("days", w.days, 30);
   check("sinceLaunch", w.sinceLaunch, false);
@@ -128,14 +155,43 @@ function near(name, actual, expected, tol = 5e-4) {
 // --- §9: no share-price update inside the window -----------------------------
 // now 2026-08-10T00:00:00Z sits inside the 43-day gap: the 3d and 7d windows
 // contain no update, so the share price did not move and the APY is 0.00 %.
+// The series is truncated at `now` first — see "the window's start" below.
 for (const windowDays of [3, 7]) {
-  const w = computeWindowApy(EVENTS, 0.999596, at("2026-08-10T00:00:00Z"), windowDays);
+  const now = at("2026-08-10T00:00:00Z");
+  const w = computeWindowApy(seriesAt(now), 0.999596, now, windowDays);
   console.log(`No share-price updates in the last ${windowDays} days (spec §9)`);
   check("label", w.label, `${windowDays}d APY`);
   check("noUpdates", w.noUpdates, true);
   check("sinceLaunch", w.sinceLaunch, false);
   near("apyPct", w.apyPct, 0);
   check("fmtPct", fmtPct(w.apyPct), "0.00%");
+}
+
+// --- §5.3: the window's start is the first update strictly after t0 ----------
+// The predicate is exactly `e.time > t0` — nothing else. The window has no
+// upper bound because it needs none: a scan reaches the head block, so the
+// series a caller holds never contains an update from the future. Handing the
+// derivation a series that does (as a vector replaying an old `now` against the
+// whole recorded history can) is the caller's truncation to do, not the
+// derivation's guess.
+{
+  const now = at("2026-08-25T15:00:00Z");
+  const t0 = now - 7 * 86400;
+  console.log("Window start — the first update strictly after t0 (spec §5.3)");
+  // An update landing exactly on t0 is outside the window; the next one starts it.
+  const onT0 = { block: 1, logIndex: 0, time: t0, oldPrice: 0.5, newPrice: 0.6 };
+  const justAfter = { block: 2, logIndex: 1, time: t0 + 1, oldPrice: 0.9, newPrice: 1 };
+  const w = computeWindowApy([onT0, justAfter], 1, now, 7);
+  check("an update on t0 does not start the window", w.noUpdates, false);
+  // startPrice 0.9 (justAfter.oldPrice), not 0.5: (1/0.9 − 1) × 365/7 × 100.
+  near("startPrice comes from the first update after t0", w.apyPct, ((1 / 0.9 - 1) * 365 * 100) / 7, 1e-9);
+}
+{
+  // Same series, same `now`, truncated or not: the difference is the caller's.
+  const now = at("2026-08-10T00:00:00Z");
+  console.log("Window start — the derivation does not bound the window at `now`");
+  check("an untruncated series takes its start from a later update", computeWindowApy(EVENTS, 0.999596, now, 3).noUpdates, false);
+  check("the truncated series a scan holds reports no updates", computeWindowApy(seriesAt(now), 0.999596, now, 3).noUpdates, true);
 }
 
 // --- §5.3 [fill-in]: a vault younger than a day ------------------------------
@@ -175,9 +231,7 @@ for (const windowDays of [3, 7]) {
 // What the deposit panel quotes while an amount is being typed: the typed
 // amount grown for a year at the headline (7 d) APY, and a twelfth of that per
 // month. `formatUsd(…, 2)` is what the callout renders, so assert the strings
-// too. (The import rides with its section; ESM hoists it.)
-import { formatUsd } from "../src/lib/format.ts";
-import { projectEarnings } from "../src/lib/apy.ts";
+// too.
 {
   const p = projectEarnings(1000, 6.1696);
   console.log("Projected earnings (spec §9) — 1,000 at the 6.1696 % headline APY");
@@ -231,7 +285,8 @@ import { projectEarnings } from "../src/lib/apy.ts";
 {
   console.log("Hero hint — no share-price update in the window (spec §6.4)");
   for (const windowDays of [3, 7]) {
-    const w = computeWindowApy(EVENTS, 0.999596, at("2026-08-10T00:00:00Z"), windowDays);
+    const now = at("2026-08-10T00:00:00Z");
+    const w = computeWindowApy(seriesAt(now), 0.999596, now, windowDays);
     check(`${windowDays}d hint`, apyHint(w), `No share-price updates in the last ${windowDays} days.`);
     // The number beside this hint is an exact zero, not a "—".
     check(`${windowDays}d value`, fmtPct(w.apyPct), "0.00%");
@@ -246,12 +301,7 @@ import { projectEarnings } from "../src/lib/apy.ts";
 
 // =============================================================================
 // Earnings vectors — a connected wallet's unrealised gain (spec §9, §6.5).
-// Appended by the earnings sub-line ticket; everything above is untouched.
 // =============================================================================
-
-// Imported here rather than merged into the header imports: this whole section
-// is appended, which keeps it out of the way of the other APY work in flight.
-import { TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED } from "../src/config/history.ts";
 
 // Verbatim from eth_getLogs on the Teller (block 25733026, tx 0x68529fdd…) —
 // wallet B's only deposit, so this one log reconstructs its whole position.
@@ -486,9 +536,123 @@ function throws(name, fn, expected) {
   check("thousands separator", fmtSignedUsd(4005.6), "+$4,005.60");
 }
 
+// =============================================================================
+// Deposit-scan bookkeeping (spec §5.5, §5.7) — src/lib/scanRuns.ts.
+//
+// Which scan may run, and which may commit what it found. The hook that owns
+// the network side keeps this state in a ref and does as it says, so the rules
+// that used to be tangled with promises and refs are asserted here instead.
+// =============================================================================
+
+const KEY_A = "0x4636…30f9:deposited";
+const KEY_B = "0xb4b0…cbe0:deposited";
+
+// --- §5.5/§5.7: a failed full scan stays recoverable -------------------------
+// No automatic retry — but the next legitimate trigger (the wallet's own
+// deposit succeeding, or an address change) must be able to scan again.
+{
+  console.log("A failed full scan leaves nothing scanned (spec §5.7)");
+  const started = startScan(NO_SCANS, KEY_A);
+  check("the scan starts from the deployment block", started.run.from, null);
+  const failed = abandonScan(started.runs, started.run);
+  check("no scanned key survives the failure", failed.runs.key, null);
+  check("and no cursor to resume from", failed.runs.cursor, null);
+  check("nothing is left running", failed.runs.running, null);
+
+  console.log("…and the next trigger may scan again (spec §5.5, §5.7)");
+  const again = startScan(failed.runs, KEY_A);
+  check("the same wallet is scanned again", again.run?.kind, "full");
+  const viaTail = requestTail(failed.runs, KEY_A);
+  check("a tail request falls back to a full scan", viaTail.run?.kind, "full");
+  check("from the deployment block", viaTail.run?.from, null);
+}
+
+// --- §5.5: a scan overtaken by another may not commit ------------------------
+// A → B → A while A's first scan is still in flight: the stale run must not
+// rewind the cursor or replace the logs when it finally lands.
+{
+  console.log("Only the newest run for the current wallet commits (spec §5.5)");
+  const a1 = startScan(NO_SCANS, KEY_A);
+  const b = startScan(a1.runs, KEY_B);
+  const a2 = startScan(b.runs, KEY_A);
+  check("the overtaken run is no longer current", isCurrent(a2.runs, a1.run), false);
+  check("the newest run is", isCurrent(a2.runs, a2.run), true);
+
+  const stale = settleScan(a2.runs, a1.run, 100n);
+  check("a stale result starts nothing", stale.run, null);
+  check("and does not move the cursor", stale.runs.cursor, null);
+  check("nor unset the running run", stale.runs.running, a2.run.generation);
+  const staleFailure = abandonScan(a2.runs, a1.run);
+  check("a stale failure does not clear the scan", staleFailure.runs.key, KEY_A);
+  check("nor stop the run in flight", staleFailure.runs.running, a2.run.generation);
+
+  const landed = settleScan(a2.runs, a2.run, 200n);
+  check("the current run does commit", landed.runs.cursor, 200n);
+  check("and leaves nothing running", landed.runs.running, null);
+}
+
+// --- §5.5: a tail asked for mid-scan is queued, not dropped ------------------
+// The wallet's own deposit is the only trigger there is; losing one leaves the
+// new deposit unseen until a reload.
+{
+  console.log("A tail requested during a scan is queued (spec §5.5)");
+  const full = startScan(NO_SCANS, KEY_A);
+  const queued = requestTail(full.runs, KEY_A);
+  check("nothing starts while the scan runs", queued.run, null);
+  check("the tail is queued", queued.runs.pendingTail, true);
+  const queuedTwice = requestTail(queued.runs, KEY_A);
+  check("a second request queues no second tail", queuedTwice.runs.pendingTail, true);
+  check("and still starts nothing", queuedTwice.run, null);
+
+  const settled = settleScan(queuedTwice.runs, full.run, 500n);
+  check("the queued tail runs once the scan settles", settled.run?.kind, "tail");
+  check("resuming just past the cursor", settled.run?.from, 501n);
+  check("the queue is empty again", settled.runs.pendingTail, false);
+  check("and the tail is now the running run", settled.runs.running, settled.run.generation);
+
+  // Settling includes failing: the deposit that triggered the queued tail is
+  // still unseen, and the full scan left nothing behind, so the queued tail
+  // becomes the full scan the wallet needs. One deferred trigger, not a retry
+  // loop — nothing queues itself.
+  const afterFailure = abandonScan(queuedTwice.runs, full.run);
+  check("a queued tail survives the scan failing", afterFailure.run?.kind, "full");
+  check("the queue is empty again", afterFailure.runs.pendingTail, false);
+}
+
+// --- §5.5: an ordinary tail, and a tail that fails ---------------------------
+{
+  console.log("A tail scan resumes from the cursor (spec §5.5)");
+  const full = startScan(NO_SCANS, KEY_A);
+  const scanned = settleScan(full.runs, full.run, 500n);
+  const tail = requestTail(scanned.runs, KEY_A);
+  check("kind", tail.run?.kind, "tail");
+  check("from the block after the cursor", tail.run?.from, 501n);
+
+  const failed = abandonScan(tail.runs, tail.run);
+  check("a failed tail keeps what was scanned", failed.runs.key, KEY_A);
+  check("and its cursor", failed.runs.cursor, 500n);
+  const next = requestTail(failed.runs, KEY_A);
+  check("so the next deposit resumes the tail", next.run?.kind, "tail");
+  check("from the same cursor", next.run?.from, 501n);
+}
+
+// --- §5.5: the precondition falling away ------------------------------------
+// Disconnecting, or an address whose share-unlock time is not resolved yet.
+{
+  console.log("Losing the precondition drops the scan (spec §5.5)");
+  const full = startScan(NO_SCANS, KEY_A);
+  const scanned = settleScan(full.runs, full.run, 500n);
+  const forgotten = forgetScans(scanned.runs);
+  check("no key", forgotten.key, null);
+  check("no cursor", forgotten.cursor, null);
+  const inFlight = startScan(NO_SCANS, KEY_A);
+  check("an in-flight run may no longer commit", isCurrent(forgetScans(inFlight.runs), inFlight.run), false);
+  check("a later run still outranks it", startScan(forgetScans(inFlight.runs), KEY_A).run.generation > inFlight.run.generation, true);
+}
+
 if (failures > 0) {
   console.error(`FAIL: ${failures} APY vector assertion(s) off spec`);
   process.exit(1);
 }
-console.log("PASS: APY vectors match docs/wayfinder/apy/spec.md §9");
+console.log("PASS: APY vectors match docs/wayfinder/apy/spec.md §5, §9");
 process.exit(0);

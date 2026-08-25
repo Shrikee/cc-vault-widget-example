@@ -1,15 +1,9 @@
 import { useState } from "react";
 
 import { HEADLINE_WINDOW, WINDOWS } from "../config/history";
-import { useNow } from "../hooks/useNow";
 import type { ShareHistory } from "../hooks/useShareHistory";
 import type { VaultMetrics } from "../hooks/useVaultMetrics";
-import {
-  apyHint,
-  computeWindowApy,
-  trailingWindowHint,
-  type WindowApy,
-} from "../lib/apy";
+import { apyHint, trailingWindowHint, type WindowApy } from "../lib/apy";
 import { fmtPct } from "../lib/format";
 
 // The vault overview's headline: the realised trailing APY over the selected
@@ -18,9 +12,11 @@ import { fmtPct } from "../lib/format";
 // It is what the vault actually returned, never a target or a forecast, hence
 // the hint and the footnote.
 //
-// The figure needs both halves of the window: the share-price history (scanned
-// once per page load) and the live share price (polled every 45 s), so it shows
-// "…" until both are in and "—" when the history scan failed.
+// The figures come from useWindowApys, derived once in App so the hero and the
+// deposit projection cannot disagree. They need both halves of the window — the
+// share-price history (scanned once per page load) and the live share price
+// (polled every 45 s) — so the hero shows "…" until both are in and "—" when
+// the history scan failed.
 
 const FOOTNOTE = "Past performance does not guarantee future returns.";
 const HISTORY_UNAVAILABLE =
@@ -32,38 +28,27 @@ type TrailingWindow = (typeof WINDOWS)[number];
 export function ApyHero({
   history,
   metrics,
+  windows,
 }: {
   history: ShareHistory;
   metrics: VaultMetrics;
+  // One figure per offered window; null while there are none yet.
+  windows: WindowApy[] | null;
 }) {
-  // The window's trailing edge only has to keep pace with the 45 s share-price
-  // poll, so a coarse tick is enough.
-  const now = useNow(30_000);
-
   // Which trailing window is on show. Deliberately local and unpersisted (spec
   // §6.1): a reload returns every visitor to the headline APY, which is also the
   // figure the deposit projection quotes whatever is selected here.
   const [selectedWindow, setSelectedWindow] =
     useState<TrailingWindow>(HEADLINE_WINDOW);
 
-  const sharePrice = metrics.shareValue;
   const failed = history.status === "error";
   // "…" only while something is still on its way. A failed metrics poll leaves
   // the share price null for good — that is a "—", not a wait.
   const loading =
     !failed &&
     metrics.error === null &&
-    (history.status === "loading" || sharePrice === null);
+    (history.status === "loading" || metrics.shareValue === null);
 
-  // Every window, not just the selected one: a tab reads "launch" when its own
-  // window reaches back before the vault existed, so each needs its own figure.
-  // Arithmetic over ≤ 60 events — cheap enough to redo on each tick.
-  const windows: WindowApy[] | null =
-    history.status === "ready" && sharePrice !== null
-      ? WINDOWS.map((windowDays) =>
-          computeWindowApy(history.events, sharePrice, now, windowDays)
-        )
-      : null;
   const figureFor = (windowDays: TrailingWindow) =>
     windows?.find((w) => w.windowDays === windowDays) ?? null;
   const apy = figureFor(selectedWindow);

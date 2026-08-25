@@ -1,5 +1,8 @@
 import type { Hex, PublicClient } from "viem";
-import { LOG_CHUNK_SPAN } from "../config/history";
+// The explicit `.ts` extension keeps this module loadable by plain Node (which
+// resolves no extensions), because src/lib/apy.ts imports the decode helpers
+// below and scripts/apy-vectors.mjs drives that module directly.
+import { LOG_CHUNK_SPAN } from "../config/history.ts";
 
 // Chunked eth_getLogs scan — the one read the yield figures are built on.
 //
@@ -58,6 +61,25 @@ async function mapWithLimit<T, R>(
   const workers = Math.max(1, Math.min(limit, items.length));
   await Promise.all(Array.from({ length: workers }, worker));
   return results;
+}
+
+// The i-th 32-byte word of a log's `data`, as the uint it encodes. Both event
+// decoders read their unindexed fields this way: ABI-encoded scalars are one
+// word each, in declaration order.
+export function dataWord(data: Hex | string, index: number): bigint {
+  return BigInt(`0x${data.slice(2).slice(index * 64, (index + 1) * 64)}`);
+}
+
+// Why a scan failed, in the words most likely to help. The provider's own
+// message (viem keeps it in `details`) beats viem's generic classification —
+// "Archive requests require a personal token" tells the operator what to fix,
+// "Invalid parameters" does not.
+export function errorMessage(e: unknown): string {
+  if (typeof e === "object" && e !== null) {
+    const err = e as { details?: string; shortMessage?: string; message?: string };
+    return err.details || err.shortMessage || err.message || String(e);
+  }
+  return String(e);
 }
 
 export async function scanLogs({

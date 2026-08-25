@@ -19,7 +19,7 @@ import {
   parseAmount,
   shortAddress,
 } from "../lib/format";
-import { projectEarnings } from "../lib/apy";
+import { projectEarnings, type WindowApy } from "../lib/apy";
 import { formatDuration } from "../lib/time";
 import { AmountInput } from "./AmountInput";
 import { Modal } from "./Modal";
@@ -41,11 +41,11 @@ export function DepositPanel({
   shareValue: number | null;
   rightChain: boolean;
   paused: boolean;
-  // The headline (7 d) realised trailing APY and its label, derived in App.
-  // `ready` is false while the share-price history is loading or failed, or the
-  // vault is too young for a figure — the projection follows the APY and simply
-  // vanishes.
-  projection: { headlineApyPct: number | null; label: string; ready: boolean };
+  // The headline (7 d) realised trailing APY, derived in App. null while the
+  // share-price history is loading or failed — the projection follows the APY
+  // and simply vanishes, as it does when the vault is too young for a figure
+  // (apyPct null).
+  projection: WindowApy | null;
   onSuccess: () => void;
 }) {
   const { isBoringV1ContextReady, deposit, depositStatus } = useBoringVaultV1();
@@ -70,9 +70,7 @@ export function DepositPanel({
   const estShares = parsed !== null && shareValue ? parsed / shareValue : null;
   // Projected earnings: what the typed amount would earn at the headline APY.
   // null — and so no callout — while nothing has been typed or no APY exists.
-  const projected = projection.ready
-    ? projectEarnings(parsed, projection.headlineApyPct)
-    : null;
+  const projected = projectEarnings(parsed, projection?.apyPct ?? null);
 
   let validationError: string | null = null;
   if (parsed === null && amount.trim()) validationError = "Enter a valid amount.";
@@ -128,15 +126,17 @@ export function DepositPanel({
         disabled={busy || !address}
       />
 
-      {projected !== null && (
+      {projected !== null && projection !== null && (
         <div className="notice notice--accent">
           <strong>
             You'd earn ≈ {formatUsd(projected.perMonth, 2)} / month ·{" "}
             {formatUsd(projected.perYear, 2)} / year
           </strong>
+          {/* The figure's own name — "7d APY", or "APY since launch" while the
+              window still reaches back past the vault's deployment — so the
+              callout can never label the number as something it is not. */}
           <span className="muted small">
-            at {fmtPct(projection.headlineApyPct)} {projection.label} —
-            estimate.
+            at {fmtPct(projection.apyPct)} {projection.label} — estimate.
           </span>
         </div>
       )}

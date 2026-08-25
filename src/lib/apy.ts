@@ -1,21 +1,43 @@
-// Realised trailing APY — the pure derivation.
+// Realised trailing APY, earnings and projected earnings — the pure derivations.
 //
 // The share price's growth over a trailing window, annualised linearly
 // (× 365 / days of the window): what the vault actually returned, never a
-// target or a forecast. Arithmetic only — no network, no React, no bundler
-// globals — so scripts/apy-vectors.mjs can drive this exact code (hence the
-// explicit `.ts` extension below: Node resolves no extensions).
-import { DEPLOY_TIMESTAMP, INITIAL_SHARE_PRICE } from "../config/history.ts";
+// target or a forecast. Arithmetic and log decoding only — no network, no
+// React, no bundler globals — so scripts/apy-vectors.mjs can drive this exact
+// code (hence the explicit `.ts` extensions below: Node resolves none).
+import {
+  DEPLOY_TIMESTAMP,
+  INITIAL_SHARE_PRICE,
+  SHARE_PRICE_UNIT,
+  TOPIC_DEPOSIT_REFUNDED,
+} from "../config/history.ts";
+import { dataWord, type RawLog } from "./logScan.ts";
 
-// One accountant ExchangeRateUpdated event. `oldRate`/`newRate` are share
-// prices in the base asset (the uint96 log value ÷ 1e6, e.g. 1.001004);
+// One accountant ExchangeRateUpdated event: the share price before and after
+// one update, in the base asset (the uint96 log value ÷ 1e6, e.g. 1.001004).
 // `time` is the event's `currentTime` (unix seconds).
-export interface RateEvent {
+export interface SharePriceUpdate {
   block: number;
   logIndex: number;
   time: number;
-  oldRate: number;
-  newRate: number;
+  oldPrice: number;
+  newPrice: number;
+}
+
+// ExchangeRateUpdated(uint96 oldRate, uint96 newRate, uint64 currentTime) —
+// none of the three is indexed, so the data field is exactly three words.
+export function decodeSharePriceUpdate(log: RawLog): SharePriceUpdate {
+  if (log.data.length - 2 < 192) {
+    throw new Error("Malformed ExchangeRateUpdated log");
+  }
+  return {
+    block: Number(log.blockNumber),
+    logIndex: Number(log.logIndex),
+    time: Number(dataWord(log.data, 2)),
+    // uint96 base-asset units (USDT, 6 dp) → share price, e.g. 1.001004.
+    oldPrice: Number(dataWord(log.data, 0)) / SHARE_PRICE_UNIT,
+    newPrice: Number(dataWord(log.data, 1)) / SHARE_PRICE_UNIT,
+  };
 }
 
 export interface WindowApy {
@@ -38,13 +60,17 @@ const DAY = 86_400;
 
 // `sharePrice` is the live (polled) share price, so the figure moves when a new
 // update lands mid-session even though the event series is scanned once.
+//
+// `updates` must be sorted ascending and must not reach past `now` — a scan
+// runs to the head block, so what a caller holds never does. (A vector
+// replaying an old `now` against a longer recorded series has to truncate it.)
 export function computeWindowApy(
-  events: RateEvent[],
+  updates: SharePriceUpdate[],
   sharePrice: number,
   now: number,
   windowDays: number
 ): WindowApy {
-  const rEnd = sharePrice;
+  const endPrice = sharePrice;
   const t0 = now - windowDays * DAY;
 
   // The window reaches back before the vault existed → measure since launch.
@@ -52,16 +78,16 @@ export function computeWindowApy(
   const days = sinceLaunch ? (now - DEPLOY_TIMESTAMP) / DAY : windowDays;
   const label = sinceLaunch ? "APY since launch" : `${windowDays}d APY`;
 
-  const first = sinceLaunch
-    ? undefined
-    : events.find((e) => e.time > t0 && e.time <= now);
+  const first = sinceLaunch ? undefined : updates.find((u) => u.time > t0);
   const noUpdates = !sinceLaunch && !first;
-  const rStart = sinceLaunch ? INITIAL_SHARE_PRICE : (first?.oldRate ?? rEnd);
+  const startPrice = sinceLaunch
+    ? INITIAL_SHARE_PRICE
+    : (first?.oldPrice ?? endPrice);
 
   // A vault younger than a day has no meaningful figure: annualising a few
   // hours is noise, so show "—" until it has 24 hours of history.
   const apyPct =
-    days < 1 ? null : ((rEnd / rStart - 1) * 365 * 100) / days;
+    days < 1 ? null : ((endPrice / startPrice - 1) * 365 * 100) / days;
 
   return { windowDays, days, sinceLaunch, noUpdates, apyPct, label };
 }
@@ -69,7 +95,7 @@ export function computeWindowApy(
 // --- Projected earnings ------------------------------------------------------
 // What a deposit being typed would earn at the headline APY — an estimate shown
 // before the deposit, never a promise. Linear, like the APY it comes from: a
-// year at the headline rate, and a twelfth of that for a month (no compounding,
+// year at the headline APY, and a twelfth of that for a month (no compounding,
 // which would overstate it).
 
 export interface ProjectedEarnings {
@@ -132,10 +158,6 @@ export function trailingWindowHint(windowDays: number): string {
 // events, so scripts/apy-vectors.mjs drives this exact code.
 // =============================================================================
 
-// Imported here rather than merged into the header import: this whole section
-// is appended, which keeps it out of the way of the other APY work in flight.
-import { TOPIC_DEPOSIT_REFUNDED } from "../config/history.ts";
-
 // One decoded Teller log for a wallet, from the single scan that fetches both
 // event types (the wallet is topics[2] in each). A refund carries only the
 // nonce it cancels — `depositHash` and `user` are all its other fields hold.
@@ -152,12 +174,6 @@ export type DepositLog =
     }
   | { kind: "refund"; nonce: string };
 
-// A raw log as eth_getLogs returns it, narrowed to what the decode needs.
-export interface RawDepositLog {
-  topics: string[];
-  data: string;
-}
-
 // Decode one Teller log from the wallet-filtered scan. Both events are fetched
 // together, so the signature in topics[0] says which this is:
 //
@@ -168,22 +184,20 @@ export interface RawDepositLog {
 //
 // The deposit's four unindexed fields are four data words; earnings needs the
 // first two. A refund carries nothing beyond the nonce it cancels.
-export function decodeDepositLog(log: RawDepositLog): DepositLog {
+export function decodeDepositLog(log: RawLog): DepositLog {
   const nonce = BigInt(log.topics[1]).toString();
   if (log.topics[0].toLowerCase() === TOPIC_DEPOSIT_REFUNDED) {
     return { kind: "refund", nonce };
   }
 
-  const body = log.data.slice(2);
-  if (body.length < 256) throw new Error("Malformed Deposit log");
-  const word = (i: number) => BigInt(`0x${body.slice(i * 64, (i + 1) * 64)}`);
+  if (log.data.length - 2 < 256) throw new Error("Malformed Deposit log");
   return {
     kind: "deposit",
     nonce,
     // An indexed address is right-aligned in its 32-byte topic.
     asset: `0x${log.topics[3].slice(-40)}`,
-    depositAmount: word(0),
-    shareAmount: word(1),
+    depositAmount: dataWord(log.data, 0),
+    shareAmount: dataWord(log.data, 1),
   };
 }
 

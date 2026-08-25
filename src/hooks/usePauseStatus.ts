@@ -54,7 +54,7 @@ export interface PauseStatus {
   // When the accountant last posted a share price, in unix seconds; null until
   // the first poll resolves (or if it never has). Read off the accountantState()
   // poll above, so it costs no extra request and is at most 30 s stale.
-  lastRateUpdateAt: number | null;
+  lastSharePriceUpdateAt: number | null;
 }
 
 export function usePauseStatus(): PauseStatus {
@@ -90,7 +90,7 @@ export function usePauseStatus(): PauseStatus {
   // means none has ever been posted, which is no more knowable than an
   // unresolved poll, so both collapse to null and the caller omits the badge.
   const lastUpdate = data?.[1]?.result?.[7];
-  const lastRateUpdateAt =
+  const lastSharePriceUpdateAt =
     lastUpdate === undefined || lastUpdate === 0n ? null : Number(lastUpdate);
 
   return {
@@ -100,6 +100,6 @@ export function usePauseStatus(): PauseStatus {
     depositsPaused: tellerPaused || accountantPaused,
     withdrawalsPaused: queuePaused || accountantPaused,
     anyPaused: tellerPaused || accountantPaused || queuePaused,
-    lastRateUpdateAt,
+    lastSharePriceUpdateAt,
   };
 }

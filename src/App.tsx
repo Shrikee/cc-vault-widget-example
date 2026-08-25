@@ -8,9 +8,7 @@ import { useUserPosition } from "./hooks/useUserPosition";
 import { useDepositHistory } from "./hooks/useDepositHistory";
 import { useWithdrawRequest } from "./hooks/useWithdrawRequest";
 import { usePauseStatus } from "./hooks/usePauseStatus";
-import { useNow } from "./hooks/useNow";
-import { computeWindowApy } from "./lib/apy";
-import { HEADLINE_WINDOW } from "./config/history";
+import { useWindowApys } from "./hooks/useWindowApys";
 import { CHAIN_ID, SHARE_SYMBOL, VAULT_NAME } from "./config/vault";
 
 import { Header } from "./components/Header";
@@ -37,25 +35,20 @@ export function App() {
   const metrics = useVaultMetrics();
   const history = useShareHistory();
   const position = useUserPosition(address);
-  const depositHistory = useDepositHistory(address, position.unlockAt);
+  // The wallet's share-unlock time is the deposit scan's precondition; when the
+  // position read failed there is none, and the sub-line says so rather than
+  // waiting forever.
+  const depositHistory = useDepositHistory(
+    address,
+    position.unlockAt,
+    position.error
+  );
   const pause = usePauseStatus();
   const { show } = useToast();
-  // The headline APY — the realised trailing APY over the 7-day window. The
-  // deposit panel's projection always quotes this one, never a toggled window,
-  // so it is derived here rather than inside the panel.
-  const now = useNow(30_000);
-  const headlineApy =
-    history.status === "ready" && metrics.shareValue !== null
-      ? computeWindowApy(history.events, metrics.shareValue, now, HEADLINE_WINDOW)
-      : null;
-  const projection = {
-    headlineApyPct: headlineApy?.apyPct ?? null,
-    // The figure's own name — "7d APY", or "APY since launch" while the window
-    // still reaches back past the vault's deployment — so the callout can never
-    // label the number as something it is not.
-    label: headlineApy?.label ?? `${HEADLINE_WINDOW}d APY`,
-    ready: headlineApy?.apyPct != null,
-  };
+  // The realised trailing APY for every window, derived once here: the hero
+  // shows the selected one, the deposit panel's projection always quotes the
+  // headline (7 d) figure whatever the toggle shows.
+  const apys = useWindowApys(history, metrics);
 
   // Celebrate a solver fill (guide §9 FILLED): the request vanishing from the
   // queue means the USDT already landed in the user's wallet.
@@ -128,7 +121,7 @@ export function App() {
                     shareValue={metrics.shareValue}
                     rightChain={rightChain}
                     paused={pause.depositsPaused}
-                    projection={projection}
+                    projection={apys.headline}
                     onSuccess={refreshAll}
                   />
                 ) : (
@@ -152,7 +145,8 @@ export function App() {
               <VaultStats
                 metrics={metrics}
                 history={history}
-                lastRateUpdateAt={pause.lastRateUpdateAt}
+                windows={apys.windows}
+                lastSharePriceUpdateAt={pause.lastSharePriceUpdateAt}
               />
               <PositionCard
                 connected={isConnected}

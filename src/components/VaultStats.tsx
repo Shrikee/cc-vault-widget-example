@@ -8,17 +8,21 @@ import { formatAmount, formatUsd, shortAddress } from "../lib/format";
 import { formatDateTime } from "../lib/time";
 import type { VaultMetrics } from "../hooks/useVaultMetrics";
 import type { ShareHistory } from "../hooks/useShareHistory";
+import type { WindowApy } from "../lib/apy";
 import { ApyHero } from "./ApyHero";
 import { Badge, Card, InlineError, Stat } from "./ui";
 
 export function VaultStats({
   metrics,
   history,
-  lastRateUpdateAt,
+  windows,
+  lastSharePriceUpdateAt,
 }: {
   metrics: VaultMetrics;
   history: ShareHistory;
-  lastRateUpdateAt: number | null;
+  // The realised trailing APY for each offered window, derived in App.
+  windows: WindowApy[] | null;
+  lastSharePriceUpdateAt: number | null;
 }) {
   const { tvl, shareValue, error } = metrics;
   const baseSymbol = BASE_ASSET.displayName ?? "USDT";
@@ -30,12 +34,14 @@ export function VaultStats({
       right={
         // Tells the visitor how fresh the APY and share price are. Omitted
         // until the accountant's last share-price update is known.
-        lastRateUpdateAt === null ? null : (
-          <Badge tone="neutral">as of {formatDateTime(lastRateUpdateAt)}</Badge>
+        lastSharePriceUpdateAt === null ? null : (
+          <Badge tone="neutral">
+            as of {formatDateTime(lastSharePriceUpdateAt)}
+          </Badge>
         )
       }
     >
-      <ApyHero history={history} metrics={metrics} />
+      <ApyHero history={history} metrics={metrics} windows={windows} />
 
       <div className="stat-grid">
         <Stat

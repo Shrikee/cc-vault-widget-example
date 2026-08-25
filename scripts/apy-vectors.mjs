@@ -416,6 +416,30 @@ function throws(name, fn, expected) {
   check("a refunded unknown asset", reconstructDeposits(refundedUnknown, DECIMALS).avgCost, null);
 }
 
+{
+  console.log("A nonce is counted once, however often it is scanned (§5.5)");
+  // A tail scan resuming from a cursor that moved backwards re-reads blocks it
+  // already folded in; the same deposit must not be counted twice.
+  const once = reconstructDeposits(depositsOf(WALLET_A), DECIMALS);
+  const twice = reconstructDeposits([...depositsOf(WALLET_A), ...depositsOf(WALLET_A)], DECIMALS);
+  check("deposited is unchanged", twice.deposited, once.deposited);
+  check("sharesMinted is unchanged", twice.sharesMinted, once.sharesMinted);
+  check("avgCost is unchanged", twice.avgCost, once.avgCost);
+  // The realistic overlap re-reads only the tail, so just the LATEST deposit
+  // repeats — and that one does skew the average deposit cost, because the
+  // doubling no longer cancels between the sums.
+  const [first, latest] = depositsOf(WALLET_A);
+  const partial = reconstructDeposits([first, latest, latest], DECIMALS);
+  check("a re-scanned tail deposit counts once", partial.deposited, 990);
+  check("avgCost to 8 dp", partial.avgCost.toFixed(8), "0.99963271");
+  // A duplicated refund is just as harmless.
+  const withRefunds = reconstructDeposits(
+    [...depositsOf(WALLET_A), refundOf("2"), refundOf("2")],
+    DECIMALS
+  );
+  check("a repeated refund still excludes once", withRefunds.deposited, 90);
+}
+
 // --- §9: earnings for the two real depositors --------------------------------
 // sharesHeld is each wallet's live balanceOf and avgCost the spec's figure, so
 // these are the numbers the widget shows today at a share price of 1.001004

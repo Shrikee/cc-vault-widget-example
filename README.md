@@ -36,24 +36,35 @@ validation, and error states are fully under our control.
 
 ```bash
 npm install
-cp .env.example .env     # optional — sensible public defaults are baked in
+cp .env.example .env     # then set VITE_RPC_URL — required (see Environment)
 npm run dev              # http://localhost:5173
 ```
 
 ```bash
 npm run build            # tsc --noEmit + vite build
 npm run typecheck
+npm run test:apy         # vectors for the yield figures (needs Node >= 22.6)
+npm run test:withdraw    # queueWithdraw 18-decimal overflow guard
 ```
+
+`npm run test:apy` needs **Node ≥ 22.6**: it imports the pure TypeScript modules
+directly and relies on Node's type stripping to load them. `package.json`
+declares that floor in `engines`.
 
 ### Environment
 
 | Var | Required | Purpose |
 |---|---|---|
-| `VITE_RPC_URL` | no | Mainnet RPC for reads. Defaults to a public endpoint; set Infura/Alchemy for production. |
+| `VITE_RPC_URL` | **yes** | Mainnet RPC for all reads, and it **must be archive-capable** (QuickNode / Alchemy / Infura — an endpoint that serves ranged `eth_getLogs` and historical `eth_call`): the yield figures scan 30 days of the accountant's share-price logs, and a connected wallet's deposit history back to the Teller's deployment. The app does **not** verify this. |
+| `VITE_HISTORY_CHUNKS_IN_FLIGHT` | no | Concurrent log-chunk requests during a history scan. Default `4`. |
 | `VITE_WALLETCONNECT_PROJECT_ID` | no | Enables WalletConnect/mobile QR. Injected wallets (MetaMask/Rabby) work without it. |
 
-Reads (TVL, share value, positions) work with **no wallet** — the vault overview
-renders for anonymous visitors straight off the public RPC.
+Reads (TVL, share price, positions) need **no wallet** — the vault overview
+renders for anonymous visitors — but they do need a keyed archive-capable RPC.
+The code still falls back to a public endpoint when `VITE_RPC_URL` is unset, and
+on that endpoint (or any other that refuses ranged `eth_getLogs`) the yield
+figures show "—" with an inline error, while TVL, share price, deposits and
+redemptions keep working.
 
 ## Deployed addresses (Ethereum mainnet)
 
@@ -74,13 +85,20 @@ Assets: base = **USDT** (`0xdAC17…ec7`); deposits accept **USDC**
 
 ## What it does
 
-- **Vault overview** — live TVL and share price (polled every 45s), vault/asset
-  contract links.
-- **Your position** — CCUSD balance, USD position value, and a live **1-day
-  share lock** countdown (`fetchUserUnlockTime`).
+- **Vault overview** — leads with the headline **realised trailing APY**
+  ("3d / 7d / 30d APY", 7d by default): the linear annualisation of the
+  on-chain share-price change over the trailing window, derived from the
+  accountant's own events and badged "as of" the last share-price update. Live
+  TVL and share price (polled every 45s) and the vault/asset contract links sit
+  below.
+- **Your position** — CCUSD balance, USD position value, **earnings** (the
+  unrealised gain on the shares held, at the wallet's average deposit cost
+  reconstructed from its Teller `Deposit` events), and a live **1-day share
+  lock** countdown (`fetchUserUnlockTime`).
 - **Deposit** — USDC/USDT token selector, amount input with balance + MAX,
-  estimated CCUSD shares, approve + deposit (two signatures), confirm dialog,
-  1-day share-lock reminder.
+  **projected earnings** for the typed amount at the headline APY, estimated
+  CCUSD shares, approve + deposit (two signatures), confirm dialog, 1-day
+  share-lock reminder.
 - **Redeem (AtomicQueue)** — request form in shares, advanced **spread %** (the
   haircut vs NAV the solver keeps; default 0.1%, contract max 1%) and request
   **validity (days)**. Reads the user's single open request **on-chain** via
@@ -101,11 +119,25 @@ WagmiProvider → QueryClientProvider → ConnectKitProvider
 
 - `src/config/vault.ts` — addresses, tokens, behavioral params (verified, see below).
 - `src/config/wagmi.ts` — wagmi config + ethers read provider.
+- `src/config/history.ts` — history-scan parameters: deployment blocks, event
+  topics, trailing windows, chunk span and chunk concurrency.
 - `src/lib/boringVault.ts` — the single import boundary to the library (see notes).
 - `src/lib/useEthersSigner.ts` — local viem→ethers signer adapter (see notes).
+- `src/lib/apy.ts` — the pure yield derivations: realised trailing APY per
+  window, earnings, projected earnings (no network, no React).
+- `src/lib/logScan.ts` — chunked `eth_getLogs` with a concurrency limit; any
+  chunk failing fails the whole scan, so a figure is never derived from a
+  partial series.
+- `src/lib/scanRuns.ts` — which deposit scan may run and which may commit
+  (wallet switches, tail scans, failures).
 - `src/hooks/*` — `useVaultMetrics`, `useUserPosition`, `useWithdrawRequest`
-  (on-chain AtomicQueue read), `useTokenBalance`, `useStatusToasts`, `useNow`.
+  (on-chain AtomicQueue read), `useShareHistory` (one 30-day share-price scan
+  per page load), `useWindowApys`, `useDepositHistory` (a wallet's average
+  deposit cost), `usePauseStatus`, `useTokenBalance`, `useStatusToasts`,
+  `useNow`.
 - `src/components/*` — custom UI.
+- `scripts/apy-vectors.mjs` — `npm run test:apy`: the APY, earnings and
+  scan-bookkeeping vectors, driving the real modules under plain Node.
 
 ---
 

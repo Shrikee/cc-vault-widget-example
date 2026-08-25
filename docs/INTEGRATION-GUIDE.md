@@ -16,6 +16,7 @@
 4. [Choosing an integration path](#4-choosing-an-integration-path)
 5. [Path A — integrating with `boring-vault-ui@1.6.3`](#5-path-a--integrating-with-boring-vault-ui163)
 6. [Path B — direct contract integration (any stack)](#6-path-b--direct-contract-integration-any-stack)
+   - [6.3 Yield figures from the contracts alone](#63-yield-figures-from-the-contracts-alone)
 7. [The redemption flow in depth (AtomicQueue)](#7-the-redemption-flow-in-depth-atomicqueue)
 8. [The Coinchange solver service — what fills your users' requests](#8-the-coinchange-solver-service--what-fills-your-users-requests)
 9. [Request lifecycle & UI state machine](#9-request-lifecycle--ui-state-machine)
@@ -234,7 +235,7 @@ What happens (verified in the 1.6.3 source and the Teller contract):
 
 The user may sign twice (approve + deposit). Show the **vault** address as the approval spender in your confirm dialog, and the Teller as the executor. Progress flows through the live `depositStatus` object (`{initiated, loading, success?, error?, tx_hash?}`) — drive toasts from it (see `src/hooks/useStatusToasts.ts`).
 
-Note the library passes `minimumMint = 0` (no slippage floor). For this vault the practical risk is negligible (NAV moves ≤ +0.1% per hourly update), but if you want a real floor, submit the deposit directly ([§6.3](#63-deposit-direct)).
+Note the library passes `minimumMint = 0` (no slippage floor). For this vault the practical risk is negligible (NAV moves ≤ +0.1% per hourly update), but if you want a real floor, submit the deposit directly ([§6.4](#64-deposit-direct)).
 
 ### 5.6 Redemptions
 
@@ -307,7 +308,45 @@ const queuePaused  = await client.readContract({ address: QUEUE,  abi: atomicQue
 // TVL: use the Lens — totalAssets(vault, accountant) → (asset, assets).
 ```
 
-### 6.3 Deposit (direct)
+### 6.3 Yield figures from the contracts alone
+
+Nothing off-chain is needed to show what the vault has actually returned: the accountant emits an event on every share-price change, and the Teller emits one per deposit. Everything below is what the reference app derives in the browser — see the file list at the end of this section.
+
+**Share-price history.** `AccountantWithRateProviders` emits `ExchangeRateUpdated(uint96 oldRate, uint96 newRate, uint64 currentTime)` (topic `0xa95bc6ab…a9439`) each time the operator publishes a new share price — currently about twice a day. Its `oldRate` / `newRate` are in base-asset units (USDT, 6 dp): `1_001_004` ⇒ a share price of `1.001004`. `currentTime` is the update's own unix timestamp, so no block→timestamp lookups are needed. Scan with `eth_getLogs` on the accountant `0x665d…d4E9`; most providers cap one request at 10,000 blocks (`toBlock − fromBlock ≤ 10,000`), so a 30-day window (~216,000 blocks) is 22 chunks — the reference app runs 4 of them at a time and fails the whole scan if any chunk fails, rather than deriving a figure from a partial series. This needs an **archive-capable** RPC: public endpoints typically refuse ranged `eth_getLogs`.
+
+**Realised trailing APY (linear, as Veda/Seven Seas compute it):**
+
+```
+r_end   = accountant.getRate() / 1e6                       // or lens.exchangeRate(accountant)
+r_start = oldRate of the first ExchangeRateUpdated with currentTime > now − W days   (if none: r_end)
+APY_W   = (r_end / r_start − 1) × 365 / W
+```
+
+Label each figure by its trailing window ("7d APY"); the reference app offers 3, 7 and 30 days and leads with the 7-day one. Four states are worth handling explicitly:
+
+- **No share-price update inside the window** ⇒ `r_start = r_end` ⇒ exactly `0.00 %`. Not a theoretical case: this vault's series contains a 43-day stretch without an update (2026-07-06 → 2026-08-17).
+- **A window reaching back before the vault existed** (the accountant was deployed at block 25401505, 2026-06-26 11:27:59 UTC) is measured since deployment instead: `r_start = 1.000000` — the constructor's starting share price, no lookup needed — and `W = days since deployment`.
+- **A vault younger than a day** has no meaningful figure; annualising a few hours is noise. The reference app shows "—" until 24 hours of history exist.
+- **Negative figures are real** and must not be clamped: the first update in this series was −0.14 %.
+
+Worked example (2026-08-25 13:06 UTC): `r_end = 1.001004`, `r_start` over 7 days `= 0.999821` ⇒ `(1.001004 / 0.999821 − 1) × 365 / 7 = 6.17 %`, the "7d APY" the reference app shows at that moment. Take `r_end` from a live `getRate()` poll rather than the last event's `newRate`: the figure then follows a newly published share price without re-scanning the history, which the reference app does exactly once per page load.
+
+**A wallet's earnings.** `TellerWithMultiAssetSupport` emits `Deposit(uint256 indexed nonce, address indexed receiver, address indexed depositAsset, uint256 depositAmount, uint256 shareAmount, uint256 depositTimestamp, uint256 shareLockPeriodAtTimeOfDeposit)` (topic `0xe96d7872…3c3a`) per deposit, and `DepositRefunded(uint256 indexed nonce, bytes32 depositHash, address indexed user)` (topic `0xaf98ea77…3624`) if one is refunded inside the share lock. The wallet is `topics[2]` in both, so a single request per chunk fetches both event types: scan the Teller `0xbC65…5bB9` from its deployment block 25401506 with `topics = [[Deposit, DepositRefunded], null, <wallet, left-padded to 32 bytes>]`, drop every deposit whose nonce was refunded, and:
+
+```
+avgCost  = Σ depositAmount / 10^assetDecimals  ÷  Σ shareAmount / 1e18     // USDC/USDT at face value
+earnings = balanceOf(wallet) / 1e18 × (r_end − avgCost)
+```
+
+`avgCost` is the wallet's **average deposit cost** — the base-asset amount it paid per CCUSD — and `earnings` is the unrealised gain on what it holds right now, signed and unclamped (a share price below the average deposit cost is a real loss). Because the cost is an average, redemptions and transfers leave it untouched, so only `Deposit` events matter and the only refresh a frontend needs is after the wallet's **own** deposit succeeds — the reference app then scans just the tail, from the last block it read. Three practical notes:
+
+- **Skip the scan entirely when `teller.shareUnlockTime(wallet) == 0`** — that wallet has never deposited. One call instead of 44 chunk requests.
+- **Value each deposit in its own asset's decimals** (USDC/USDT: 6, `shareAmount` always 18). An unknown deposit asset is an error state, not a guess.
+- **Do not use `teller.depositNonce()` as a deposit count** — the deployed counter diverges from upstream.
+
+Reference implementation: [`src/hooks/useShareHistory.ts`](../src/hooks/useShareHistory.ts) (the once-per-page-load share-price scan), [`src/hooks/useWindowApys.ts`](../src/hooks/useWindowApys.ts) (all three windows, derived in one place), [`src/hooks/useDepositHistory.ts`](../src/hooks/useDepositHistory.ts) (a wallet's deposits and the tail re-scan), [`src/lib/apy.ts`](../src/lib/apy.ts) (the pure derivations, pinned by `npm run test:apy`) and [`src/lib/logScan.ts`](../src/lib/logScan.ts) (the chunked, concurrency-limited scan).
+
+### 6.4 Deposit (direct)
 
 ```ts
 // 1. Approve the VAULT (not the teller!) to pull the deposit asset.
@@ -327,7 +366,7 @@ await wallet.writeContract({
 
 `depositWithPermit` also exists (spender = the **vault**) — usable with USDC (which supports EIP-2612) to collapse approve+deposit into one transaction; USDT does not support permit. Watch the `Deposit` event for confirmation UX; `shareLockPeriodAtTimeOfDeposit` is right there in the event.
 
-### 6.4 Post a redemption request (direct)
+### 6.5 Post a redemption request (direct)
 
 ```ts
 // 1. Approve CCUSD shares to the queue. safeUpdateAtomicRequest REQUIRES
@@ -349,7 +388,7 @@ await wallet.writeContract({
 
 `safeUpdateAtomicRequest` reverts if: `offerAmount` exceeds the user's share **balance**; the **allowance** to the queue is below `offerAmount`; the `deadline` is in the past; `offerAmount == 0`; `discount > 10000`; the offer token isn't the accountant's vault; or the accountant is paused (`getRateInQuoteSafe` reverts). Handle each with a specific message — the error names are in [Appendix A](#appendix-a--contract-reference).
 
-### 6.5 Track fills (direct)
+### 6.6 Track fills (direct)
 
 When the solver fills the request, the user receives USDT directly and the request is zeroed. Two complementary signals:
 
@@ -510,7 +549,7 @@ Consolidated. Items 1 and 8 were fixed upstream in 1.6.3 (the version this repo 
 | 4 | `useEthersSigner` not exported; all `dist/…` deep imports blocked by the `exports` map | Import errors / unreachable code | Local adapter `src/lib/useEthersSigner.ts`; single import boundary `src/lib/boringVault.ts` |
 | 5 | Duplicate `@wagmi/core` (library pins an old range) | Type errors; wallet connects but hooks don't see it | `"overrides": { "@wagmi/core": "2.22.1" }` |
 | 6 | One shared `withdrawStatus` object across all withdraw actions | Concurrent actions overwrite each other's status | Track which action is in flight in component state |
-| 7 | `deposit` passes `minimumMint = 0` | No slippage floor (low risk here: NAV moves ≤ +0.1%/h) | Accept, or deposit directly with a computed floor ([§6.3](#63-deposit-direct)) |
+| 7 | `deposit` passes `minimumMint = 0` | No slippage floor (low risk here: NAV moves ≤ +0.1%/h) | Accept, or deposit directly with a computed floor ([§6.4](#64-deposit-direct)) |
 | 8 | Deposit path in ≤ 1.6.2 also used `.toNumber()` | Latent only — USDC/USDT are 6-decimal, values stay safe | Fixed upstream in 1.6.3 (same commit as #1); the float allowance-compare residual of [§5.1(b)](#51-install) applies |
 | 9 | Prebuilt components: only `DepositButton` is importable; it drags in Chakra UI | Deep-path component imports fail | Build custom UI off the hook (this whole repo is the example) |
 
@@ -676,7 +715,7 @@ function checkUserDeposit(address account, ERC20 depositAsset, uint256 depositAm
 | `src/components/RequestRow.tsx` | Request state rendering (open/filling/stopped/expired) |
 | `scripts/queue-withdraw-regression.cjs` | CI guard that the 1.6.3 overflow fix is present and effective (issue #1) |
 
-Run it: `npm install && npm run dev` (optionally set `VITE_RPC_URL` / `VITE_WALLETCONNECT_PROJECT_ID`, see `.env.example`). Reads work with no wallet.
+Run it: `npm install && npm run dev` (set `VITE_RPC_URL` to an archive-capable endpoint — required for the yield figures of [§6.3](#63-yield-figures-from-the-contracts-alone) — and optionally `VITE_WALLETCONNECT_PROJECT_ID`; see `.env.example`). Reads work with no wallet.
 
 ---
 

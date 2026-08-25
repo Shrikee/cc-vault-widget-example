@@ -12,7 +12,14 @@ import {
   SHARE_LOCK_PERIOD,
   explorerAddress,
 } from "../config/vault";
-import { formatAmount, parseAmount, shortAddress } from "../lib/format";
+import {
+  fmtPct,
+  formatAmount,
+  formatUsd,
+  parseAmount,
+  shortAddress,
+} from "../lib/format";
+import { projectEarnings } from "../lib/apy";
 import { formatDuration } from "../lib/time";
 import { AmountInput } from "./AmountInput";
 import { Modal } from "./Modal";
@@ -25,6 +32,7 @@ export function DepositPanel({
   shareValue,
   rightChain,
   paused,
+  projection,
   onSuccess,
 }: {
   signer: JsonRpcSigner | undefined;
@@ -33,6 +41,11 @@ export function DepositPanel({
   shareValue: number | null;
   rightChain: boolean;
   paused: boolean;
+  // The headline (7 d) realised trailing APY and its label, derived in App.
+  // `ready` is false while the share-price history is loading or failed, or the
+  // vault is too young for a figure — the projection follows the APY and simply
+  // vanishes.
+  projection: { headlineApyPct: number | null; label: string; ready: boolean };
   onSuccess: () => void;
 }) {
   const { isBoringV1ContextReady, deposit, depositStatus } = useBoringVaultV1();
@@ -55,6 +68,11 @@ export function DepositPanel({
   // shareValue is the NAV of one share in base-asset (USDT ≈ $1) units, and the
   // deposit tokens are pegged 1:1, so shares ≈ amount / shareValue.
   const estShares = parsed !== null && shareValue ? parsed / shareValue : null;
+  // Projected earnings: what the typed amount would earn at the headline APY.
+  // null — and so no callout — while nothing has been typed or no APY exists.
+  const projected = projection.ready
+    ? projectEarnings(parsed, projection.headlineApyPct)
+    : null;
 
   let validationError: string | null = null;
   if (parsed === null && amount.trim()) validationError = "Enter a valid amount.";
@@ -109,6 +127,19 @@ export function DepositPanel({
         unit={symbol}
         disabled={busy || !address}
       />
+
+      {projected !== null && (
+        <div className="notice notice--accent">
+          <strong>
+            You'd earn ≈ {formatUsd(projected.perMonth, 2)} / month ·{" "}
+            {formatUsd(projected.perYear, 2)} / year
+          </strong>
+          <span className="muted small">
+            at {fmtPct(projection.headlineApyPct)} {projection.label} —
+            estimate.
+          </span>
+        </div>
+      )}
 
       <div className="rows">
         <div className="row">

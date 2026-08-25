@@ -784,3 +784,13 @@ a:hover {
   font-size: 0.82rem;
   color: var(--text-muted);
 }
+
+/* ---------- projected earnings callout (deposit panel) ---------- */
+/* The accent-tinted sibling of .notice--info / .notice--warning: teal, because
+   the projection is the deposit panel's echo of the vault card's headline APY.
+   Spacing comes from .panel's 16px gap, so no margin here. */
+.notice--accent {
+  background: rgba(20, 184, 166, 0.08);
+  border: 1px solid rgba(20, 184, 166, 0.3);
+  color: #b9efe6;
+}

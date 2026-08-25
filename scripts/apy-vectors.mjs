@@ -171,6 +171,33 @@ for (const windowDays of [3, 7]) {
   check("rounds to 2 dp", fmtPct(6.1696), "6.17%");
 }
 
+// --- §9: projected earnings --------------------------------------------------
+// What the deposit panel quotes while an amount is being typed: the typed
+// amount grown for a year at the headline (7 d) APY, and a twelfth of that per
+// month. `formatUsd(…, 2)` is what the callout renders, so assert the strings
+// too. (The import rides with its section; ESM hoists it.)
+import { formatUsd } from "../src/lib/format.ts";
+import { projectEarnings } from "../src/lib/apy.ts";
+{
+  const p = projectEarnings(1000, 6.1696);
+  console.log("Projected earnings (spec §9) — 1,000 at the 6.1696 % headline APY");
+  near("perYear", p?.perYear, 61.696);
+  near("perMonth", p?.perMonth, 5.1413);
+  check("per year rendered", formatUsd(p?.perYear ?? null, 2), "$61.70");
+  check("per month rendered", formatUsd(p?.perMonth ?? null, 2), "$5.14");
+}
+// No figure without both halves — this is what keeps the callout off screen
+// while the amount is empty and while the share-price history is loading or
+// errored (spec §5.6, §6.3).
+{
+  console.log("Projected earnings — absent cases (spec §5.6, §6.3)");
+  check("no amount", projectEarnings(null, 6.1696), null);
+  check("zero amount", projectEarnings(0, 6.1696), null);
+  check("negative amount", projectEarnings(-10, 6.1696), null);
+  check("no APY (loading, errored, or a vault younger than a day)", projectEarnings(1000, null), null);
+  near("a negative APY still projects", projectEarnings(1000, -1.2288)?.perYear, -12.288);
+}
+
 if (failures > 0) {
   console.error(`FAIL: ${failures} APY vector assertion(s) off spec`);
   process.exit(1);

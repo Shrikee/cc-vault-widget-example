@@ -6,7 +6,7 @@
 //
 // PASS (exit 0): every vector matches the spec.
 // FAIL (exit 1): the derivation drifted from the spec.
-import { computeWindowApy } from "../src/lib/apy.ts";
+import { apyHint, computeWindowApy, trailingWindowHint } from "../src/lib/apy.ts";
 import { fmtPct } from "../src/lib/format.ts";
 import { DEPLOY_TIMESTAMP } from "../src/config/history.ts";
 
@@ -169,6 +169,52 @@ for (const windowDays of [3, 7]) {
   check("never clamped", fmtPct(-123.456), "−123.46%");
   check("a negative that rounds to zero", fmtPct(-0.001), "0.00%");
   check("rounds to 2 dp", fmtPct(6.1696), "6.17%");
+}
+
+// --- §6.4: the hero hint each APY state reads --------------------------------
+// The four hint states that follow from the derivation itself (the fifth, the
+// RPC-error hint, belongs to the component: no WindowApy exists to describe it).
+// Copy is verbatim from spec §6.4 — these assertions are the guard against it
+// drifting.
+{
+  console.log("Hero hint — a normal trailing window (spec §6.4)");
+  for (const windowDays of [3, 7, 30]) {
+    const w = computeWindowApy(EVENTS, SHARE_PRICE, at("2026-08-25T15:00:00Z"), windowDays);
+    check(
+      `${windowDays}d hint`,
+      apyHint(w),
+      `Last ${windowDays} days, annualised — not guaranteed.`
+    );
+  }
+  // The hero shows the same sentence before any figure exists, from this helper.
+  check("pending 7d hint", trailingWindowHint(7), "Last 7 days, annualised — not guaranteed.");
+}
+{
+  // The 30d window predates the vault: 12 days of history, measured since launch.
+  const w = computeWindowApy(EVENTS, 0.999596, at("2026-07-08T11:27:59Z"), 30);
+  console.log("Hero hint — since launch (spec §6.4)");
+  check("since-launch hint", apyHint(w), "Since launch (12 days), annualised — not guaranteed.");
+}
+{
+  // A part-day of vault age counts only whole elapsed days: 12.7 days ⇒ "12 days".
+  const w = computeWindowApy(EVENTS, 0.999596, DEPLOY_TIMESTAMP + Math.round(12.7 * 86400), 30);
+  console.log("Hero hint — since launch counts whole days (spec §6.4)");
+  check("whole-day hint", apyHint(w), "Since launch (12 days), annualised — not guaranteed.");
+}
+{
+  console.log("Hero hint — no share-price update in the window (spec §6.4)");
+  for (const windowDays of [3, 7]) {
+    const w = computeWindowApy(EVENTS, 0.999596, at("2026-08-10T00:00:00Z"), windowDays);
+    check(`${windowDays}d hint`, apyHint(w), `No share-price updates in the last ${windowDays} days.`);
+    // The number beside this hint is an exact zero, not a "—".
+    check(`${windowDays}d value`, fmtPct(w.apyPct), "0.00%");
+  }
+}
+{
+  const w = computeWindowApy([], 1.000002, DEPLOY_TIMESTAMP + 12 * 3600, 7);
+  console.log("Hero hint — vault younger than a day (spec §6.4)");
+  check("under-a-day hint", apyHint(w), "Since launch (<1 day) — APY available after 24 hours.");
+  check("under-a-day value", fmtPct(w.apyPct), "—");
 }
 
 if (failures > 0) {

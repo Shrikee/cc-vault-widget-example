@@ -135,7 +135,7 @@ export function App() {
                 shares={position.shares}
                 shareValue={metrics.shareValue}
                 unlockAt={position.unlockAt}
-                earnings={depositHistory}
+                depositHistory={depositHistory}
               />
               <HowItWorks />
             </aside>

@@ -13,13 +13,15 @@ export function PositionCard({
   shares,
   shareValue,
   unlockAt,
-  earnings,
+  depositHistory,
 }: {
   connected: boolean;
   shares: number | null;
   shareValue: number | null;
   unlockAt: number | null;
-  earnings: DepositHistory;
+  // Earnings is derived here rather than passed in: the average deposit cost
+  // comes from the scan, the shares and share price the card already has.
+  depositHistory: DepositHistory;
 }) {
   const now = useNow();
 
@@ -40,7 +42,7 @@ export function PositionCard({
   // Earnings: position value minus what the wallet paid for these shares, at
   // its average deposit cost. Signed — a share price below that cost is a real
   // loss — and toned off the rounded figure so a tenth of a cent reads flat.
-  const earningsUsd = computeEarnings(shares, shareValue, earnings.avgCost);
+  const earningsUsd = computeEarnings(shares, shareValue, depositHistory.avgCost);
   const rounded = earningsUsd === null ? 0 : Number(earningsUsd.toFixed(2));
   const tone = rounded > 0 ? "up" : rounded < 0 ? "down" : "flat";
 
@@ -49,11 +51,11 @@ export function PositionCard({
   // position gets no sub-line, because the figure would be $0.00 regardless of
   // what it once earned.
   const earningsHint = (): ReactNode => {
-    if (earnings.status === "none")
+    if (depositHistory.status === "none")
       return "Earnings — No deposits found for this wallet.";
-    if (earnings.status === "error")
+    if (depositHistory.status === "error")
       return "Earnings — Couldn't load deposit history.";
-    if (earnings.status !== "ready" || earningsUsd === null) return "…";
+    if (depositHistory.status !== "ready" || earningsUsd === null) return "…";
     if (shares === 0) return undefined;
     return (
       <>
@@ -88,9 +90,9 @@ export function PositionCard({
         />
       </div>
 
-      {earnings.status === "error" && (
+      {depositHistory.status === "error" && (
         <InlineError>
-          Couldn't load deposit history: {earnings.error}
+          Couldn't load deposit history: {depositHistory.error}
         </InlineError>
       )}
 

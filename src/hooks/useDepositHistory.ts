@@ -62,6 +62,25 @@ function errorMessage(e: unknown): string {
   return String(e);
 }
 
+// The wallet's Teller logs over one block range. Both event types come back
+// from a single request per chunk, because the wallet sits at the same topic
+// index in each.
+function scanWallet(
+  client: NonNullable<ReturnType<typeof usePublicClient>>,
+  wallet: string,
+  fromBlock: bigint,
+  toBlock: bigint
+) {
+  return scanLogs({
+    client,
+    address: CONTRACTS.teller,
+    topics: [[TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED], null, pad32(wallet)],
+    fromBlock,
+    toBlock,
+    chunksInFlight: historyChunksInFlight(),
+  });
+}
+
 function summarise(logs: DepositLog[], lastScannedBlock: bigint): DepositHistoryState {
   // Recomputed over every log the wallet has, not folded into running sums: a
   // refund scanned later cancels a deposit counted earlier.
@@ -120,16 +139,7 @@ export function useDepositHistory(
     setState({ status: "loading" });
     (async () => {
       const latest = await client.getBlockNumber();
-      const raw = await scanLogs({
-        client,
-        address: CONTRACTS.teller,
-        // Both event types in one request per chunk — the wallet sits at the
-        // same topic index in each.
-        topics: [[TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED], null, pad32(address)],
-        fromBlock: BigInt(DEPLOY_BLOCKS.teller),
-        toBlock: latest,
-        chunksInFlight: historyChunksInFlight(),
-      });
+      const raw = await scanWallet(client, address, BigInt(DEPLOY_BLOCKS.teller), latest);
       if (scannedKey.current !== key) return; // another wallet took over
       logs.current = raw.map(decodeDepositLog);
       lastScanned.current = latest;
@@ -137,7 +147,8 @@ export function useDepositHistory(
     })().catch((e) => {
       if (scannedKey.current !== key) return;
       // No retry and no partial data: a dropped chunk would hide deposits and
-      // overstate the earnings.
+      // overstate the earnings. Nothing was scanned, so there is no cursor to
+      // resume from either.
       lastScanned.current = null;
       setState({ status: "error", error: errorMessage(e) });
     });
@@ -156,14 +167,7 @@ export function useDepositHistory(
     (async () => {
       const latest = await client.getBlockNumber();
       if (latest <= from) return;
-      const raw = await scanLogs({
-        client,
-        address: CONTRACTS.teller,
-        topics: [[TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED], null, pad32(address)],
-        fromBlock: from + 1n,
-        toBlock: latest,
-        chunksInFlight: historyChunksInFlight(),
-      });
+      const raw = await scanWallet(client, address, from + 1n, latest);
       if (scannedKey.current !== key) return;
       logs.current = [...logs.current, ...raw.map(decodeDepositLog)];
       lastScanned.current = latest;
@@ -171,7 +175,9 @@ export function useDepositHistory(
     })()
       .catch((e) => {
         if (scannedKey.current !== key) return;
-        lastScanned.current = null;
+        // The cursor stays put: everything up to it is still good, so the next
+        // deposit's refresh can pick the tail up again. Still no automatic
+        // retry — nothing re-runs this on its own.
         setState({ status: "error", error: errorMessage(e) });
       })
       .finally(() => {

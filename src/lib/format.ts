@@ -50,30 +50,37 @@ export function parseAmount(input: string): number | null {
   return n;
 }
 
+// The sign a figure will be READ with: round to the decimals it is shown at
+// first, then take the sign. A tenth of a cent reads flat rather than as a
+// gain, and a hair below zero is "0.00%", never "−0.00%" — which the sign, the
+// minus glyph and the up/down tone all have to agree on.
+export function signAfterRounding(value: number, decimals: number): -1 | 0 | 1 {
+  const rounded = Number(value.toFixed(decimals));
+  if (rounded > 0) return 1;
+  if (rounded < 0) return -1;
+  return 0;
+}
+
 // Realised trailing APY: 2 dp, signed with a true minus (U+2212), never
 // clamped — a negative window is a real result. "—" when no figure exists.
 export function fmtPct(value: number | null | undefined): string {
   if (value === undefined || value === null || Number.isNaN(value)) return "—";
-  // Round first, then sign: a value that rounds to zero is "0.00%", never
-  // "−0.00%".
   const magnitude = `${Math.abs(value).toFixed(2)}%`;
-  return Number(value.toFixed(2)) < 0 ? `−${magnitude}` : magnitude;
+  return signAfterRounding(value, 2) < 0 ? `−${magnitude}` : magnitude;
 }
 
 // Earnings: a signed USD figure — "+$12.34" / "−$0.20" / "$0.00", always 2 dp,
-// with a true minus (U+2212) and "—" when there is no figure. As in fmtPct the
-// sign comes from the *rounded* value, so a gain of a tenth of a cent reads
-// "$0.00" rather than "+$0.00".
+// with a true minus (U+2212) and "—" when there is no figure.
 export function fmtSignedUsd(value: number | null | undefined): string {
   if (value === undefined || value === null || Number.isNaN(value)) return "—";
-  const rounded = Number(value.toFixed(2));
   const magnitude = Math.abs(value).toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  if (rounded > 0) return `+${magnitude}`;
-  if (rounded < 0) return `−${magnitude}`;
+  const sign = signAfterRounding(value, 2);
+  if (sign > 0) return `+${magnitude}`;
+  if (sign < 0) return `−${magnitude}`;
   return magnitude;
 }

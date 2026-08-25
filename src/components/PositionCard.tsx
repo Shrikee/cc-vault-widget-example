@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { SHARE_SYMBOL } from "../config/vault";
-import { formatAmount, formatUsd, fmtSignedUsd } from "../lib/format";
+import { formatAmount, formatUsd, fmtSignedUsd, signAfterRounding } from "../lib/format";
 import { computeEarnings } from "../lib/apy";
 import type { DepositHistory } from "../hooks/useDepositHistory";
 import { formatDateTime, formatDuration } from "../lib/time";
@@ -43,21 +43,22 @@ export function PositionCard({
   // its average deposit cost. Signed — a share price below that cost is a real
   // loss — and toned off the rounded figure so a tenth of a cent reads flat.
   const earningsUsd = computeEarnings(shares, shareValue, depositHistory.avgCost);
-  const rounded = earningsUsd === null ? 0 : Number(earningsUsd.toFixed(2));
-  const tone = rounded > 0 ? "up" : rounded < 0 ? "down" : "flat";
+  const sign = earningsUsd === null ? 0 : signAfterRounding(earningsUsd, 2);
+  const tone = sign > 0 ? "up" : sign < 0 ? "down" : "flat";
 
   // The sub-line under Position value. A wallet that never deposited says so
   // (its scan is skipped outright); a wallet that has since exited its whole
   // position gets no sub-line, because the figure would be $0.00 regardless of
-  // what it once earned.
-  const earningsHint = (): ReactNode => {
-    if (depositHistory.status === "none")
-      return "Earnings — No deposits found for this wallet.";
-    if (depositHistory.status === "error")
-      return "Earnings — Couldn't load deposit history.";
-    if (depositHistory.status !== "ready" || earningsUsd === null) return "…";
-    if (shares === 0) return undefined;
-    return (
+  // what it once earned. The error line is doubled by the InlineError below —
+  // the reason belongs beside the figure and in the card's error slot (§6.2).
+  const earningsHint: ReactNode =
+    depositHistory.status === "none" ? (
+      "Earnings — No deposits found for this wallet."
+    ) : depositHistory.status === "error" ? (
+      "Earnings — Couldn't load deposit history."
+    ) : depositHistory.status !== "ready" || earningsUsd === null ? (
+      "…"
+    ) : shares === 0 ? undefined : (
       <>
         <strong className={`earnings earnings--${tone}`}>
           {fmtSignedUsd(earningsUsd)}
@@ -65,7 +66,6 @@ export function PositionCard({
         earned since your deposits
       </>
     );
-  };
 
   return (
     <Card
@@ -86,7 +86,7 @@ export function PositionCard({
         <Stat
           label="Position value"
           value={positionValue === null ? "…" : formatUsd(positionValue, 2)}
-          hint={earningsHint()}
+          hint={earningsHint}
         />
       </div>
 

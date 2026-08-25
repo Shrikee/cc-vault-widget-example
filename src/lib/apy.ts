@@ -65,3 +65,28 @@ export function computeWindowApy(
 
   return { windowDays, days, sinceLaunch, noUpdates, apyPct, label };
 }
+
+// --- Projected earnings ------------------------------------------------------
+// What a deposit being typed would earn at the headline APY — an estimate shown
+// before the deposit, never a promise. Linear, like the APY it comes from: a
+// year at the headline rate, and a twelfth of that for a month (no compounding,
+// which would overstate it).
+
+export interface ProjectedEarnings {
+  perYear: number;
+  perMonth: number;
+}
+
+// null whenever there is nothing honest to show — no amount typed yet, and no
+// headline APY because the share-price history is still loading, failed, or the
+// vault is younger than a day. Callers render the callout iff this is non-null.
+export function projectEarnings(
+  amount: number | null,
+  headlineApyPct: number | null
+): ProjectedEarnings | null {
+  if (amount === null || !Number.isFinite(amount) || amount <= 0) return null;
+  if (headlineApyPct === null || !Number.isFinite(headlineApyPct)) return null;
+
+  const perYear = (amount * headlineApyPct) / 100;
+  return { perYear, perMonth: perYear / 12 };
+}

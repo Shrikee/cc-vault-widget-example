@@ -794,3 +794,24 @@ a:hover {
   border: 1px solid rgba(20, 184, 166, 0.3);
   color: #b9efe6;
 }
+
+/* ---------- compact segmented toggle (APY trailing window) ---------- */
+/* The .tabs pill shrunk to sit beside the APY hero number instead of spanning a
+   panel: no bottom margin, tighter padding, and tabs sized by their own label
+   rather than stretched to share the row. */
+.tabs--compact {
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 0;
+}
+.tabs--compact .tab {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+}
+/* Disabled while the share-price history is loading or unavailable: there is no
+   figure to switch to. */
+.tabs--compact .tab:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

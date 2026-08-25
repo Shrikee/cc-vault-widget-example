@@ -90,3 +90,36 @@ export function projectEarnings(
   const perYear = (amount * headlineApyPct) / 100;
   return { perYear, perMonth: perYear / 12 };
 }
+
+// -----------------------------------------------------------------------------
+// The hint that reads out a window's state (spec §6.4).
+//
+// It lives beside the derivation rather than in the component because the four
+// states it distinguishes ARE the derivation's states: whichever branch of
+// computeWindowApy produced the figure decides the sentence under it, so the two
+// stay in step and scripts/apy-vectors.mjs can hold the copy to the spec. The
+// fifth hero hint — the RPC-failure one — has no WindowApy to describe and stays
+// in the component.
+// -----------------------------------------------------------------------------
+export function apyHint(apy: WindowApy): string {
+  // No figure at all: the vault is younger than the 24 hours the annualisation
+  // needs — the only way computeWindowApy returns a null percentage.
+  if (apy.apyPct === null) {
+    return "Since launch (<1 day) — APY available after 24 hours.";
+  }
+  if (apy.noUpdates) {
+    return `No share-price updates in the last ${apy.windowDays} days.`;
+  }
+  if (apy.sinceLaunch) {
+    // Whole elapsed days only — a vault 12.7 days old has 12 days behind it.
+    return `Since launch (${Math.floor(apy.days)} days), annualised — not guaranteed.`;
+  }
+  return trailingWindowHint(apy.windowDays);
+}
+
+// What an ordinary trailing window reads — split out because the hero shows the
+// same sentence before any figure exists (while the scan is in flight), and the
+// copy should have exactly one home under the vectors' guard.
+export function trailingWindowHint(windowDays: number): string {
+  return `Last ${windowDays} days, annualised — not guaranteed.`;
+}

@@ -69,7 +69,7 @@ export interface LaunchAnchors {
   // 30d stack is 3m25s later than the block (spec, Further Notes).
   deployTimestamp: number;
   // The share price at that instant, the opening point of every since-launch
-  // figure. The accountant's constructor sets the exchange rate to 1.000000
+  // figure. The accountant's constructor sets its `exchangeRate` to 1.000000
   // base/share on both products, so there is nothing to look up.
   initialSharePrice: number;
 }

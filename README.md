@@ -52,6 +52,11 @@ environment, through the app's own `vite.config.ts` — no DOM library and no
 component tests. `npm run test:withdraw` stays a plain Node script: it guards a
 packaged-library bug (see the caveats below) and is unrelated to the seams above.
 
+The **Node ≥ 22.6** floor in `package.json`'s `engines` predates Vitest: the
+vectors used to import the TypeScript modules directly and needed Node's type
+stripping to load them. Nothing requires that any more — the floor is left as
+the Node this project is developed and tested on.
+
 ### Environment
 
 | Var | Required | Purpose |
@@ -160,7 +165,14 @@ WagmiProvider → QueryClientProvider → ConnectKitProvider
 
 ## On-chain verification (2026-08-27)
 
-Checked against the live Polygon contracts over JSON-RPC:
+Checked against the live Polygon contracts over JSON-RPC. Both products in
+`src/config/vaults.json` were re-verified on **2026-08-28** at chain head
+92,835,789 — that run's full table is in
+[`docs/specs/two-vault-widget.md`](./docs/specs/two-vault-widget.md), and the
+provenance of the four values no chain read can confirm is in
+[`src/config/vaults.ts`](./src/config/vaults.ts).
+
+The 24h product's checks:
 
 | Check | Result |
 |---|---|

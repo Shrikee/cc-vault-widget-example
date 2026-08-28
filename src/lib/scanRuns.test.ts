@@ -4,7 +4,9 @@
 // the network side keeps this state in a ref and does as it says, so the rules
 // that used to be tangled with promises and refs are asserted here instead.
 //
-// Ported from scripts/apy-vectors.mjs unchanged apart from the runner.
+// These began as the last section of scripts/apy-vectors.mjs, a plain Node
+// script removed in the change that added this file; the rules and their
+// expected values are unchanged.
 import { describe, expect, it } from "vitest";
 
 import {

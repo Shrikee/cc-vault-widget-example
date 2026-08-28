@@ -4,9 +4,9 @@
 // against the spec (docs/wayfinder/apy/spec.md §5, §9). No network, no React,
 // no DOM: arithmetic and log decoding only.
 //
-// Ported from scripts/apy-vectors.mjs, which ran these same vectors under plain
-// Node with a hand-rolled check()/near() runner. Every expected value is the
-// one that script asserted.
+// These began as scripts/apy-vectors.mjs — a plain Node script with its own
+// check()/near() runner, removed in the change that added this file. Every
+// expected value below is the one that script asserted.
 import type { Hex } from "viem";
 import { describe, expect, it } from "vitest";
 
@@ -68,7 +68,7 @@ const SERIES: [number, string, number, number][] = [
 // be configured for. What the vectors measure is the derivation, not the chain
 // the widget points at.
 //
-// The accountant's constructor sets the exchange rate to 1.000000 base/share,
+// The accountant's constructor sets its `exchangeRate` to 1.000000 base/share,
 // so that is the opening point of a since-launch figure.
 const SERIES_LAUNCH = Math.floor(Date.parse("2026-06-26T11:27:59Z") / 1000);
 const LAUNCH: LaunchAnchors = {

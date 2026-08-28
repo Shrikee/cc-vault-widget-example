@@ -56,6 +56,11 @@ export interface VaultAddresses {
 
 // Everything only this widget needs. Kept in its own block so the keys above it
 // still line up name-for-name with the solver roster.
+//
+// `ui` is the spec's name for the block and the JSON key, so it is the name
+// here too. It reads narrower than what it holds — these are chain facts, and
+// the scan and the redeem call consume most of them — but the division it draws
+// is not "presentation vs logic": it is "the widget's, not the roster's".
 export interface VaultUi {
   // vault.name() / symbol() / decimals(), read from the chain.
   name: string;
@@ -66,8 +71,13 @@ export interface VaultUi {
   shareLockPeriod: number;
   // Deploy blocks, each confirmed by asserting code exists at that block and
   // does not at the block before it. The share-price scan reads the
-  // accountant's logs and the deposit scan the teller's; `vault` is carried
-  // because it was verified alongside them, and nothing reads it.
+  // accountant's logs and the deposit scan the teller's.
+  //
+  // `vault` is a deliberate deviation: the spec's registry sketch lists only
+  // the accountant and the teller, but the verified figures this registry was
+  // built from give all three, and today's DEPLOY_BLOCKS carries all three. A
+  // prefactor should not quietly drop a verified value, so it is required here
+  // too — and nothing reads it. Drop it when something decides it is noise.
   deployBlocks: { vault: number; accountant: number; teller: number };
   // The accountant's deploy BLOCK timestamp, unix seconds — the anchor for a
   // trailing window measured since launch. Read from the chain rather than from
@@ -94,6 +104,9 @@ export interface Vault {
   ui: VaultUi;
 }
 
+// The registry is the file; the roster is what parsing it yields. The spec
+// draws the same line ("a guard that returns a typed roster"), and so does the
+// solver service, whose own roster this file is shaped after.
 export interface VaultRoster {
   chain: ChainConfig;
   vaults: Vault[];
@@ -189,8 +202,7 @@ function parseVault(raw: unknown, chain: ChainConfig, path: string): Vault {
     fail(`${path}.chain`, `is ${show(declared)}, but the registry declares ${show(chain.key)}`);
   }
 
-  const block = (key: string, at: Fields, atPath: string) =>
-    whole(at, key, atPath, "a block number");
+  const blocksPath = `${path}.ui.deployBlocks`;
 
   return {
     id: text(from, "id", path),
@@ -204,7 +216,7 @@ function parseVault(raw: unknown, chain: ChainConfig, path: string): Vault {
       accountant: address(addresses, "accountant", `${path}.addresses`),
       lens: address(addresses, "lens", `${path}.addresses`),
     },
-    eventsFromBlock: block("eventsFromBlock", from, path),
+    eventsFromBlock: whole(from, "eventsFromBlock", path, "a block number"),
     vestingSeconds: whole(from, "vestingSeconds", path, "a number of seconds"),
     ui: {
       name: text(ui, "name", `${path}.ui`),
@@ -212,9 +224,9 @@ function parseVault(raw: unknown, chain: ChainConfig, path: string): Vault {
       decimals: whole(ui, "decimals", `${path}.ui`, "a decimal count"),
       shareLockPeriod: whole(ui, "shareLockPeriod", `${path}.ui`, "a number of seconds"),
       deployBlocks: {
-        vault: block("vault", deployBlocks, `${path}.ui.deployBlocks`),
-        accountant: block("accountant", deployBlocks, `${path}.ui.deployBlocks`),
-        teller: block("teller", deployBlocks, `${path}.ui.deployBlocks`),
+        vault: whole(deployBlocks, "vault", blocksPath, "a block number"),
+        accountant: whole(deployBlocks, "accountant", blocksPath, "a block number"),
+        teller: whole(deployBlocks, "teller", blocksPath, "a block number"),
       },
       deployTimestamp: whole(ui, "deployTimestamp", `${path}.ui`, "a unix timestamp"),
     },

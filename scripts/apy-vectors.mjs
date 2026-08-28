@@ -69,16 +69,29 @@ const SERIES = [
   [25832405, "2026-08-25T13:06:47.000Z", 1000902, 1001004],
 ];
 
+// SERIES was recorded against a vault launched at this instant. The derivation
+// reads DEPLOY_TIMESTAMP from config, so the fixture is re-anchored to whatever
+// launch the app is currently configured for: every timestamp below (and every
+// `now` the vectors replay) shifts by the same delta.
+//
+// The expected APYs are unaffected — an APY depends only on the price ratio and
+// the elapsed days between two points, and a uniform shift preserves both. This
+// is what keeps the vectors a test of the derivation rather than of the chain
+// the widget happens to point at. Block numbers are not shifted: they are only
+// used for ordering and dedup, never for time.
+const SERIES_LAUNCH = Math.floor(Date.parse("2026-06-26T11:27:59Z") / 1000);
+const SHIFT = DEPLOY_TIMESTAMP - SERIES_LAUNCH;
+
 // Share prices are uint96 base-asset units (USDT, 6 dp): 1_001_004 ⇒ 1.001004.
 const EVENTS = SERIES.map(([block, iso, before, after], i) => ({
   block,
   logIndex: i,
-  time: Math.floor(Date.parse(iso) / 1000),
+  time: Math.floor(Date.parse(iso) / 1000) + SHIFT,
   oldPrice: before / 1e6,
   newPrice: after / 1e6,
 }));
 
-const at = (iso) => Math.floor(Date.parse(iso) / 1000);
+const at = (iso) => Math.floor(Date.parse(iso) / 1000) + SHIFT;
 // The series a scan holds at a given moment: it reaches the head block, so it
 // ends at `now`. Replaying an earlier `now` against the whole recorded history
 // has to truncate it the same way (spec §5.3).

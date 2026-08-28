@@ -1,7 +1,7 @@
 # Coinchange Yield Prime (CCUSD) — End-User dApp
 
 A production-style, fully custom frontend for the **Coinchange Yield Prime**
-vault — a USD stablecoin vault on Ethereum mainnet whose share token is
+vault — a USD stablecoin vault on Polygon PoS whose share token is
 **CCUSD** (`name: "Yield Prime"`, 18 decimals) — built on
 [`boring-vault-ui@1.6.3`](https://www.npmjs.com/package/boring-vault-ui/v/1.6.3).
 
@@ -13,7 +13,7 @@ vault — a USD stablecoin vault on Ethereum mainnet whose share token is
 > caveat with its workaround. This repository is the reference implementation
 > that guide points into.
 
-It implements the full user surface: view the vault, deposit **USDC or USDT**,
+It implements the full user surface: view the vault, deposit **USDT**,
 and redeem via the **AtomicQueue** (request → an off-chain solver fills it to
 USDT; no separate claim step). The library's prebuilt Chakra components are
 **not** used — the UI is built directly on `useBoringVaultV1()` so branding,
@@ -55,7 +55,7 @@ declares that floor in `engines`.
 
 | Var | Required | Purpose |
 |---|---|---|
-| `VITE_RPC_URL` | **yes** | Mainnet RPC for all reads, and it **must be archive-capable** (QuickNode / Alchemy / Infura — an endpoint that serves ranged `eth_getLogs` and historical `eth_call`): the yield figures scan 30 days of the accountant's share-price logs, and a connected wallet's deposit history back to the Teller's deployment. The app does **not** verify this. |
+| `VITE_RPC_URL` | **yes** | Polygon PoS RPC for all reads, and it **must be archive-capable** (QuickNode / Alchemy / Infura — an endpoint that serves ranged `eth_getLogs` and historical `eth_call`): the yield figures scan 30 days of the accountant's share-price logs, and a connected wallet's deposit history back to the Teller's deployment. The app does **not** verify this. |
 | `VITE_HISTORY_CHUNKS_IN_FLIGHT` | no | Concurrent log-chunk requests during a history scan. Default `4`. |
 | `VITE_WALLETCONNECT_PROJECT_ID` | no | Enables WalletConnect/mobile QR. Injected wallets (MetaMask/Rabby) work without it. |
 
@@ -66,10 +66,14 @@ on that endpoint (or any other that refuses ranged `eth_getLogs`) the yield
 figures show "—" with an inline error, while TVL, share price, deposits and
 redemptions keep working.
 
-## Deployed addresses (Ethereum mainnet)
+## Deployed addresses (Polygon PoS, chainId 137)
 
 Defined in `src/config/vault.ts` and verified against the live contracts
-(see [On-chain verification](#on-chain-verification-2026-06-26) below).
+(see [On-chain verification](#on-chain-verification-2026-08-27) below).
+
+The vault is deployed at the **same addresses on Polygon as on Ethereum**
+(deterministic deployment) — only the chain, the asset addresses and the
+explorer differ.
 
 | Contract | Address |
 |---|---|
@@ -80,8 +84,9 @@ Defined in `src/config/vault.ts` and verified against the live contracts
 | AtomicQueue (`withdrawQueueContract`) | `0x1479aea1a79e10a6B8c3925f66a7b1dFe0FEeF93` |
 | AtomicSolverV4 | `0x6c0f80f755f3C094587E4b5242A0D6570B2F3EAA` |
 
-Assets: base = **USDT** (`0xdAC17…ec7`); deposits accept **USDC**
-(`0xA0b86…eB48`) and USDT (both pegged 1:1); redemptions pay **USDT**.
+Assets: base = **USDT** (`0xc2132D05D31c914a87C6611C10748AEb04B58e8F`), which is
+the **only** accepted deposit asset — `teller.isSupported()` is `false` for both
+native USDC and bridged USDC.e on Polygon. Redemptions pay USDT.
 
 ## What it does
 
@@ -95,7 +100,7 @@ Assets: base = **USDT** (`0xdAC17…ec7`); deposits accept **USDC**
   unrealised gain on the shares held, at the wallet's average deposit cost
   reconstructed from its Teller `Deposit` events), and a live **1-day share
   lock** countdown (`fetchUserUnlockTime`).
-- **Deposit** — USDC/USDT token selector, amount input with balance + MAX,
+- **Deposit** — USDT amount input with balance + MAX,
   **projected earnings** for the typed amount at the headline APY, estimated
   CCUSD shares, approve + deposit (two signatures), confirm dialog, 1-day
   share-lock reminder.
@@ -141,19 +146,21 @@ WagmiProvider → QueryClientProvider → ConnectKitProvider
 
 ---
 
-## On-chain verification (2026-06-26)
+## On-chain verification (2026-08-27)
 
-Checked against the live contracts with `cast`:
+Checked against the live Polygon contracts over JSON-RPC:
 
 | Check | Result |
 |---|---|
 | `vault.symbol()` / `name()` / `decimals()` | `CCUSD` / `Yield Prime` / **18** ✓ |
 | `accountant.getRate()` | `1e6` (1 CCUSD ≈ 1 USDT) ✓ |
-| `accountant.getRateInQuoteSafe(USDC/USDT)` | `1e6` ✓ |
+| `accountant.base()` | `0xc2132D05…58e8F` (Polygon USDT) ✓ |
+| `teller.isSupported(USDT)` | `true` ✓ (USDC / USDC.e: `false`) |
 | `teller.shareLockPeriod()` | `86400` (1 day) ✓ |
 | `AtomicQueue.isPaused()` | `false` ✓ |
 | `safeUpdateAtomicRequest` is a public capability | `true` ✓ (end users can self-submit) |
-| RPC / chain | mainnet, chainId 1 ✓ |
+| `teller.deposit(USDT, …)` simulated with an allowance | mints 1:1 ✓ |
+| RPC / chain | Polygon PoS, chainId 137 ✓ |
 
 ## Library notes / caveats
 

@@ -1,11 +1,18 @@
 import type { Token } from "../lib/boringVault";
 
 // =============================================================================
-// Coinchange "Yield Prime" vault — production parameters (Ethereum mainnet).
+// Coinchange "Yield Prime" vault — production parameters (Polygon PoS).
 //
-// Verified on-chain (2026-06-26): vault.symbol()="CCUSD", name()="Yield Prime",
-//   decimals()=18; accountant.getRate()=1e6 (1 share ≈ 1 USDT); AtomicQueue
-//   safeUpdateAtomicRequest is a public capability.
+// The vault is deployed at the SAME addresses on Polygon as on Ethereum
+// (deterministic deployment), so the address list below is unchanged from the
+// mainnet build — but the chain, the asset addresses and the explorer are not.
+//
+// Verified on-chain against Polygon (chainId 137) on 2026-08-27:
+//   vault.name()="Yield Prime", symbol()="CCUSD", decimals()=18
+//   accountant.getRate()=1000000 (1 share = 1.000000 USDT), isPaused()=false
+//   accountant.base()=0xc2132D05…58e8F (Polygon USDT)
+//   teller.shareLockPeriod()=86400, teller.isPaused()=false
+//   AtomicQueue.isPaused()=false
 //
 // VERIFY these against the live contracts before each release — addresses
 // change when a vault is redeployed.
@@ -15,8 +22,11 @@ import type { Token } from "../lib/boringVault";
 // UNUSED (allowPublicWithdraws=false), so the frontend uses the queue flow.
 // =============================================================================
 
-export const CHAIN = "ethereum" as const;
-export const CHAIN_ID = 1; // Ethereum mainnet
+export const CHAIN = "polygon" as const;
+export const CHAIN_ID = 137; // Polygon PoS
+
+// Human-readable chain name — used in UI copy and the wrong-network prompt.
+export const CHAIN_LABEL = "Polygon";
 
 // Vault share token identity.
 export const VAULT_NAME = "Yield Prime";
@@ -32,29 +42,25 @@ export const CONTRACTS = {
   // solver fills it. Passed to the provider as `withdrawQueueContract`.
   withdrawQueue: "0x1479aea1a79e10a6B8c3925f66a7b1dFe0FEeF93",
   atomicSolver: "0x6c0f80f755f3C094587E4b5242A0D6570B2F3EAA",
-  // delayWithdraw (0x44D0…583e) is deployed but unused for this vault.
+  // delayWithdraw is deployed but unused for this vault.
 } as const;
 
 // -----------------------------------------------------------------------------
-// Assets. Base/unit-of-account is USDT (6 decimals); deposits accept USDC or
-// USDT (both pegged 1:1); redemptions pay out USDT.
+// Assets. Base/unit-of-account is USDT (6 decimals) — accountant.base().
+//
+// USDT is the ONLY accepted deposit asset on Polygon: teller.isSupported() is
+// false for both native USDC (0x3c49…3359) and bridged USDC.e (0x2791…4174),
+// so offering USDC here would let a user pick an asset whose deposit reverts.
+// Re-check isSupported() before adding one back.
 // -----------------------------------------------------------------------------
-export const USDC: Token = {
-  address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-  decimals: 6,
-  displayName: "USDC",
-  image:
-    "https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png",
-};
-
 export const USDT: Token = {
-  address: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+  address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
   decimals: 6,
   displayName: "USDT",
   image: "https://assets.coingecko.com/coins/images/325/small/Tether.png",
 };
 
-export const DEPOSIT_TOKENS: Token[] = [USDC, USDT];
+export const DEPOSIT_TOKENS: Token[] = [USDT];
 export const WITHDRAW_TOKENS: Token[] = [USDT];
 export const BASE_ASSET: Token = USDT;
 
@@ -80,6 +86,6 @@ export const WITHDRAW_DISCOUNT_PCT_MAX = 1; // contract MAX_DISCOUNT = 0.01e6 = 
 export const WITHDRAW_VALID_DAYS_DEFAULT = 7;
 
 // Block explorer for tx links / address confirmations.
-export const EXPLORER = "https://etherscan.io";
+export const EXPLORER = "https://polygonscan.com";
 export const explorerTx = (hash: string) => `${EXPLORER}/tx/${hash}`;
 export const explorerAddress = (addr: string) => `${EXPLORER}/address/${addr}`;

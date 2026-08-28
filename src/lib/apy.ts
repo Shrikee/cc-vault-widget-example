@@ -202,7 +202,7 @@ export function decodeDepositLog(log: RawLog): DepositLog {
 }
 
 export interface DepositTotals {
-  // Base-asset value deposited — USDC/USDT at face value ($1).
+  // Base-asset value deposited — USDT at face value ($1).
   deposited: number;
   sharesMinted: number;
   // Average deposit cost: what the wallet paid per CCUSD. null when no deposit

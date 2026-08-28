@@ -9,7 +9,7 @@ import { useDepositHistory } from "./hooks/useDepositHistory";
 import { useWithdrawRequest } from "./hooks/useWithdrawRequest";
 import { usePauseStatus } from "./hooks/usePauseStatus";
 import { useWindowApys } from "./hooks/useWindowApys";
-import { CHAIN_ID, SHARE_SYMBOL, VAULT_NAME } from "./config/vault";
+import { CHAIN_ID, CHAIN_LABEL, SHARE_SYMBOL, VAULT_NAME } from "./config/vault";
 
 import { Header } from "./components/Header";
 import { NetworkBanner } from "./components/NetworkBanner";
@@ -80,7 +80,7 @@ export function App() {
         <div className="hero">
           <h1>Coinchange {VAULT_NAME}</h1>
           <p>
-            Deposit USDC or USDT to earn yield in {VAULT_NAME} ({SHARE_SYMBOL}).
+            Deposit USDT to earn yield in {VAULT_NAME} ({SHARE_SYMBOL}).
             To redeem, submit a request — an off-chain solver fills it and sends
             you USDT, no separate claim step.
           </p>
@@ -171,7 +171,9 @@ export function App() {
               boring-vault-ui@1.6.3
             </a>
           </span>
-          <span>Ethereum mainnet · {SHARE_SYMBOL}</span>
+          <span>
+            {CHAIN_LABEL} · {SHARE_SYMBOL}
+          </span>
         </footer>
       </main>
     </div>

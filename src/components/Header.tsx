@@ -1,5 +1,10 @@
 import { ConnectKitButton } from "connectkit";
-import { BASE_ASSET, SHARE_SYMBOL, VAULT_NAME } from "../config/vault";
+import {
+  BASE_ASSET,
+  CHAIN_LABEL,
+  SHARE_SYMBOL,
+  VAULT_NAME,
+} from "../config/vault";
 
 export function Header() {
   return (
@@ -14,7 +19,9 @@ export function Header() {
         />
         <div className="brand__text">
           <span className="brand__name">Coinchange {VAULT_NAME}</span>
-          <span className="brand__sub">{SHARE_SYMBOL} · Ethereum</span>
+          <span className="brand__sub">
+            {SHARE_SYMBOL} · {CHAIN_LABEL}
+          </span>
         </div>
       </div>
       <ConnectKitButton showBalance={false} />

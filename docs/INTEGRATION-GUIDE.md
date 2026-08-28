@@ -2,9 +2,11 @@
 
 > **Audience:** external developers integrating the Coinchange Boring Vault smart contracts into their own frontend.
 > **Reference implementation:** this repository — a complete, production-style React dApp you can run, read, and copy from.
-> **Scope:** the live **Yield Prime (CCUSD)** stablecoin vault on Ethereum mainnet: viewing the vault, depositing USDC/USDT, and redeeming shares through the **AtomicQueue**, which is filled by **Coinchange's own solver service**.
+> **Scope:** the live **Yield Prime (CCUSD)** stablecoin vault on **Polygon PoS** (`chainId 137`): viewing the vault, depositing USDT, and redeeming shares through the **AtomicQueue**, which is filled by **Coinchange's own solver service**.
 >
-> Everything in this guide was verified against the deployed mainnet contracts and `boring-vault-ui@1.6.3` as shipped on npm. The contracts implement the audited Se7en-Seas/Veda "Boring Vault" architecture.
+> Everything in this guide was verified against the deployed contracts and `boring-vault-ui@1.6.3` as shipped on npm.
+>
+> **Chain note:** this vault was previously documented on Ethereum mainnet and is deployed at the **same addresses on Polygon** (deterministic deployment). The contract table below is therefore unchanged, but the **chain id, the ERC-20 asset addresses and the set of accepted deposit assets are not** — on Polygon, USDT is the only supported deposit asset. Passages below that discuss USDC (including the `depositWithPermit` path) describe the Ethereum deployment and do not apply here. The contracts implement the audited Se7en-Seas/Veda "Boring Vault" architecture.
 
 ---
 
@@ -47,7 +49,7 @@ The Coinchange vault is a deployment of the audited Se7en-Seas/Veda **Boring Vau
 
 ```
 DEPOSIT (synchronous, 1–2 transactions)
-  user ── approve(USDC/USDT → BoringVault) ──▶ ERC-20
+  user ── approve(USDT → BoringVault) ──▶ ERC-20
   user ── deposit(asset, amount, minimumMint) ─▶ Teller ──▶ mints CCUSD to user
                                                             shares locked for 24h
 
@@ -66,7 +68,7 @@ Key mental model for the redeem side: the queue is a **limit order book with exa
 
 ## 2. Live deployment reference
 
-All addresses are **Ethereum mainnet** (`chainId 1`), verified on-chain (contracts respond with the expected `symbol()`/`name()`/rates).
+All addresses are **Polygon PoS** (`chainId 137`), verified on-chain on 2026-08-27 (contracts respond with the expected `symbol()`/`name()`/rates).
 
 ### Contracts
 
@@ -86,10 +88,9 @@ A `DelayedWithdraw` contract is also deployed for this vault but **unused** — 
 | Token | Address | Decimals | Role |
 |---|---|---|---|
 | CCUSD (vault shares) | `0x844a9d1B20A3016610B5270F32eDDCc1E27787cC` | **18** | what depositors hold; what redeemers sell |
-| USDT | `0xdAC17F958D2ee523a2206206994597C13D831ec7` | 6 | **base asset** (unit of account) *and* the redemption payout token |
-| USDC | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` | 6 | accepted for deposit (pegged 1:1 with USDT in the accountant) |
+| USDT | `0xc2132D05D31c914a87C6611C10748AEb04B58e8F` | 6 | **base asset** (unit of account), the only accepted deposit asset, *and* the redemption payout token |
 
-Deposits accept **USDC or USDT**. Redemptions pay **USDT only** — do not assume USDC; the solver is configured to fill share→USDT requests exclusively.
+Deposits accept **USDT only** — `teller.isSupported()` returns `false` for both native USDC (`0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359`) and bridged USDC.e (`0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174`), so a USDC deposit reverts with `__AssetNotSupported`. Redemptions likewise pay **USDT only** — the solver is configured to fill share→USDT requests exclusively.
 
 ### Behavioral parameters
 
@@ -187,7 +188,7 @@ import { BoringVaultV1Provider } from "boring-vault-ui";
   lensContract="0x5732789EB6Eef65173bA732EE3b05f3f23AB840b"
   withdrawQueueContract="0x1479aea1a79e10a6B8c3925f66a7b1dFe0FEeF93"
   ethersProvider={ethersProvider}          // ethers.JsonRpcProvider — reads only
-  depositTokens={[USDC, USDT]}
+  depositTokens={[USDT]}
   withdrawTokens={[USDT]}
   baseAsset={USDT}
   vaultDecimals={18}                       // CCUSD has 18 decimals — NOT the base asset's 6
@@ -520,7 +521,7 @@ Deposit-side state is simpler: track `shareUnlockTime` and show a countdown; whi
 The accountant auto-pauses if a rate update falls outside its bounds — pauses are a real operational state, not a theoretical one. Poll the flags and render a clear "temporarily suspended" banner rather than letting transactions revert.
 
 **Deposit edge cases.**
-- Asset not in `teller.isSupported(asset)` → `__AssetNotSupported`. Only USDC/USDT.
+- Asset not in `teller.isSupported(asset)` → `__AssetNotSupported`. On Polygon: USDT only.
 - Repeat deposits re-lock the user's entire share balance for another 24h (per-user, not per-deposit). Say so before they top up with an open redemption plan.
 - USDT's non-standard `approve` (must set to 0 before changing a non-zero allowance) is handled by exact-amount approvals; if you implement infinite approvals, handle it.
 
@@ -566,7 +567,7 @@ Consolidated. Items 1 and 8 were fixed upstream in 1.6.3 (the version this repo 
 **Configuration**
 - [ ] Addresses from [§2](#2-live-deployment-reference), confirmed with Coinchange; on-chain sanity check (`vault.symbol() === "CCUSD"`, `vault.decimals() === 18`, `accountant.getRate()` ≈ 1e6) at build or boot.
 - [ ] `vaultDecimals = 18`; base asset USDT (6); redemption pays **USDT only**.
-- [ ] `chainId 1` enforced for writes; dedicated RPC (not the public default) for production.
+- [ ] `chainId 137` enforced for writes; dedicated RPC (not the public default) for production.
 
 **Deposit UX**
 - [ ] Approval spender shown = **vault** address; two-signature flow explained.

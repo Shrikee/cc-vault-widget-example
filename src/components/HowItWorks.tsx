@@ -6,7 +6,7 @@ import { Card } from "./ui";
 export function HowItWorks() {
   const steps = [
     {
-      title: "Deposit USDC or USDT",
+      title: "Deposit USDT",
       body: `Approve and deposit a stablecoin. You receive ${SHARE_SYMBOL} vault shares.`,
     },
     {

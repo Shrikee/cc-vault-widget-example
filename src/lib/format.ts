@@ -14,7 +14,7 @@ export function formatNumber(
 }
 
 // Token / share amounts: trim trailing zeros but keep precision up to `maxDp`.
-// Used for USDC/USDT amounts and CCUSD share balances alike.
+// Used for USDT amounts and CCUSD share balances alike.
 export function formatAmount(
   value: number | undefined | null,
   maxDp = 6

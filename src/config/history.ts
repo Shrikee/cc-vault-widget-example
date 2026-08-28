@@ -10,26 +10,30 @@
 // deployment blocks and the deployment timestamp are vault-specific.
 // =============================================================================
 
-// Deployment blocks (Ethereum mainnet, 2026-06-26T11:27:59Z).
+// Deployment blocks (Polygon PoS, 2026-08-12T18:05:49Z). Found by bisecting
+// eth_getCode against the live chain on 2026-08-27.
 export const DEPLOY_BLOCKS = {
-  vault: 25401503,
-  accountant: 25401505,
-  teller: 25401506,
+  vault: 91901943,
+  accountant: 91901948,
+  teller: 91901950,
 } as const;
 
-// Block 25401505 — the accountant's deployment. Windows reaching further back
+// Block 91901948 — the accountant's deployment. Windows reaching further back
 // are measured since launch instead.
-export const DEPLOY_TIMESTAMP = 1782473279; // 2026-06-26T11:27:59Z
+export const DEPLOY_TIMESTAMP = 1786557949; // 2026-08-12T18:05:49Z
 
 // The accountant's constructor sets exchangeRate = 1.000000 base/share, so the
 // share price at launch needs no lookup.
 export const INITIAL_SHARE_PRICE = 1;
 
-// Provider cap on a ranged eth_getLogs: toBlock − fromBlock ≤ 10,000.
+// Provider cap on a ranged eth_getLogs: toBlock − fromBlock ≤ 10,000. Measured
+// against the Polygon endpoint — it rejects wider ranges with code -32614.
 export const LOG_CHUNK_SPAN = 10_000;
 
-// 7,200 blocks/day × 30 — the flat span every share-price scan covers.
-export const BLOCKS_30D = 216_000;
+// 57,600 blocks/day × 30 — the flat span every share-price scan covers.
+// Polygon produces a block roughly every 1.5 s (measured over the trailing
+// 100k blocks), so a 30-day window is ~8x the block count it was on Ethereum.
+export const BLOCKS_30D = 1_728_000;
 
 // Trailing windows offered for the realised trailing APY; the headline is 7 d.
 export const WINDOWS = [3, 7, 30] as const;
@@ -54,7 +58,8 @@ export const TOPIC_DEPOSIT_REFUNDED =
   "0xaf98ea774275cadfa3e477a7b52cba03e01197445a76bd5d0d561608708c3624";
 
 // How many eth_getLogs chunk requests a scan keeps in flight. 4 is measured
-// safe against QuickNode's 50 req/s limit (22 chunks ≈ 1 s).
+// safe against QuickNode's 50 req/s limit; 8 trips it (code -32007). On Polygon
+// a full 30-day span is ~173 chunks, so a cold scan takes a few seconds.
 export const DEFAULT_CHUNKS_IN_FLIGHT = 4;
 
 // Read lazily, not at module scope: src/lib/apy.ts imports the constants above

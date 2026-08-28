@@ -1,5 +1,5 @@
 import { useAccount, useSwitchChain } from "wagmi";
-import { CHAIN_ID } from "../config/vault";
+import { CHAIN_ID, CHAIN_LABEL } from "../config/vault";
 import { Button } from "./ui";
 
 // Vault writes only work on the vault's chain. Prompt a switch if the connected
@@ -13,7 +13,7 @@ export function NetworkBanner() {
   return (
     <div className="banner banner--warning" role="alert">
       <span>
-        Wrong network. Switch to <strong>Ethereum mainnet</strong> to deposit or
+        Wrong network. Switch to <strong>{CHAIN_LABEL}</strong> to deposit or
         withdraw.
       </span>
       <Button

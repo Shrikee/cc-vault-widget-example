@@ -9,12 +9,7 @@
 // under plain Node, which resolves none. They run under Vitest now, through
 // Vite's own resolver, so the extensions are gone with the constraint that
 // forced them.
-import {
-  DEPLOY_TIMESTAMP,
-  INITIAL_SHARE_PRICE,
-  SHARE_PRICE_UNIT,
-  TOPIC_DEPOSIT_REFUNDED,
-} from "../config/history";
+import { SHARE_PRICE_UNIT, TOPIC_DEPOSIT_REFUNDED } from "../config/history";
 import { dataWord, type RawLog } from "./logScan";
 
 // One accountant ExchangeRateUpdated event: the share price before and after
@@ -50,7 +45,8 @@ export interface WindowApy {
   // The span actually measured — `windowDays`, or the vault's age when the
   // window reaches back before launch.
   days: number;
-  // The window predates the vault: measured since launch from 1.000000.
+  // The window predates the vault: measured since launch, from the launch
+  // share price.
   sinceLaunch: boolean;
   // No share-price update landed inside the window: the APY is exactly 0.00 %.
   noUpdates: boolean;
@@ -62,6 +58,22 @@ export interface WindowApy {
 
 const DAY = 86_400;
 
+// Where a vault's history starts. Both figures are properties of the vault
+// being measured, not of the derivation, so they are arguments: the widget
+// serves two products with different launches, and a window that predates one
+// of them does not predate the other.
+export interface LaunchAnchors {
+  // The vault's launch instant, unix seconds — its accountant's deploy block
+  // timestamp (registry `ui.deployTimestamp`). Read from the chain, never from
+  // a deployment record: that record holds the broadcast time, which on the
+  // 30d stack is 3m25s later than the block (spec, Further Notes).
+  deployTimestamp: number;
+  // The share price at that instant, the opening point of every since-launch
+  // figure. The accountant's constructor sets the exchange rate to 1.000000
+  // base/share on both products, so there is nothing to look up.
+  initialSharePrice: number;
+}
+
 // `sharePrice` is the live (polled) share price, so the figure moves when a new
 // update lands mid-session even though the event series is scanned once.
 //
@@ -69,6 +81,7 @@ const DAY = 86_400;
 // runs to the head block, so what a caller holds never does. (A vector
 // replaying an old `now` against a longer recorded series has to truncate it.)
 export function computeWindowApy(
+  launch: LaunchAnchors,
   updates: SharePriceUpdate[],
   sharePrice: number,
   now: number,
@@ -78,14 +91,14 @@ export function computeWindowApy(
   const t0 = now - windowDays * DAY;
 
   // The window reaches back before the vault existed → measure since launch.
-  const sinceLaunch = t0 < DEPLOY_TIMESTAMP;
-  const days = sinceLaunch ? (now - DEPLOY_TIMESTAMP) / DAY : windowDays;
+  const sinceLaunch = t0 < launch.deployTimestamp;
+  const days = sinceLaunch ? (now - launch.deployTimestamp) / DAY : windowDays;
   const label = sinceLaunch ? "APY since launch" : `${windowDays}d APY`;
 
   const first = sinceLaunch ? undefined : updates.find((u) => u.time > t0);
   const noUpdates = !sinceLaunch && !first;
   const startPrice = sinceLaunch
-    ? INITIAL_SHARE_PRICE
+    ? launch.initialSharePrice
     : (first?.oldPrice ?? endPrice);
 
   // A vault younger than a day has no meaningful figure: annualising a few

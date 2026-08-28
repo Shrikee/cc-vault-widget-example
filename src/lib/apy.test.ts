@@ -5,8 +5,8 @@
 // no DOM: arithmetic and log decoding only.
 //
 // Ported from scripts/apy-vectors.mjs, which ran these same vectors under plain
-// Node with a hand-rolled check()/near() runner. The assertions and their
-// expected values are unchanged; only the runner is.
+// Node with a hand-rolled check()/near() runner. Every expected value is the
+// one that script asserted.
 import type { Hex } from "viem";
 import { describe, expect, it } from "vitest";
 
@@ -20,14 +20,11 @@ import {
   reconstructDeposits,
   trailingWindowHint,
   type DepositLog,
+  type LaunchAnchors,
 } from "./apy";
 import { fmtPct, fmtSignedUsd, formatUsd } from "./format";
 import type { RawLog } from "./logScan";
-import {
-  DEPLOY_TIMESTAMP,
-  TOPIC_DEPOSIT,
-  TOPIC_DEPOSIT_REFUNDED,
-} from "../config/history";
+import { TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED } from "../config/history";
 
 // The real share-price series: 28 ExchangeRateUpdated events emitted by the
 // accountant between deployment and 2026-08-25T13:06:47Z, inlined from
@@ -65,29 +62,31 @@ const SERIES: [number, string, number, number][] = [
   [25832405, "2026-08-25T13:06:47.000Z", 1000902, 1001004],
 ];
 
-// SERIES was recorded against a vault launched at this instant. The derivation
-// reads DEPLOY_TIMESTAMP from config, so the fixture is re-anchored to whatever
-// launch the app is currently configured for: every timestamp below (and every
-// `now` the vectors replay) shifts by the same delta.
+// SERIES was recorded against a vault launched at this instant, and the vectors
+// now say so: computeWindowApy takes its launch anchors as an argument, so the
+// fixture no longer has to be shifted onto whatever launch the app happens to
+// be configured for. What the vectors measure is the derivation, not the chain
+// the widget points at.
 //
-// The expected APYs are unaffected — an APY depends only on the price ratio and
-// the elapsed days between two points, and a uniform shift preserves both. This
-// is what keeps the vectors a test of the derivation rather than of the chain
-// the widget happens to point at. Block numbers are not shifted: they are only
-// used for ordering and dedup, never for time.
+// The accountant's constructor sets the exchange rate to 1.000000 base/share,
+// so that is the opening point of a since-launch figure.
 const SERIES_LAUNCH = Math.floor(Date.parse("2026-06-26T11:27:59Z") / 1000);
-const SHIFT = DEPLOY_TIMESTAMP - SERIES_LAUNCH;
+const LAUNCH: LaunchAnchors = {
+  deployTimestamp: SERIES_LAUNCH,
+  initialSharePrice: 1,
+};
 
 // Share prices are uint96 base-asset units (USDT, 6 dp): 1_001_004 ⇒ 1.001004.
+// Block numbers are carried as recorded: they order and dedup logs, never time.
 const EVENTS = SERIES.map(([block, iso, before, after], i) => ({
   block,
   logIndex: i,
-  time: Math.floor(Date.parse(iso) / 1000) + SHIFT,
+  time: Math.floor(Date.parse(iso) / 1000),
   oldPrice: before / 1e6,
   newPrice: after / 1e6,
 }));
 
-const at = (iso: string) => Math.floor(Date.parse(iso) / 1000) + SHIFT;
+const at = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 // The series a scan holds at a given moment: it reaches the head block, so it
 // ends at `now`. Replaying an earlier `now` against the whole recorded history
 // has to truncate it the same way (spec §5.3).
@@ -103,7 +102,7 @@ describe("computeWindowApy — the realised trailing APY (spec §5.3, §9)", () 
   it("measures the 7d headline window from the first update after t0", () => {
     // now 2026-08-25T15:00:00Z ⇒ startPrice 0.999821 (the share price before
     // the first update inside the trailing window) ⇒ 6.1696 % ⇒ "6.17%".
-    const w = computeWindowApy(EVENTS, SHARE_PRICE, at("2026-08-25T15:00:00Z"), 7);
+    const w = computeWindowApy(LAUNCH, EVENTS, SHARE_PRICE, at("2026-08-25T15:00:00Z"), 7);
     expect(w.label).toBe("7d APY");
     expect(w.windowDays).toBe(7);
     expect(w.days).toBe(7);
@@ -114,7 +113,7 @@ describe("computeWindowApy — the realised trailing APY (spec §5.3, §9)", () 
   });
 
   it("measures the 3d window — startPrice 1.000497", () => {
-    const w = computeWindowApy(EVENTS, SHARE_PRICE, at("2026-08-25T15:00:00Z"), 3);
+    const w = computeWindowApy(LAUNCH, EVENTS, SHARE_PRICE, at("2026-08-25T15:00:00Z"), 3);
     expect(w.label).toBe("3d APY");
     expect(w.days).toBe(3);
     expect(w.apyPct).toBeCloseTo(6.1654, TOL_DIGITS);
@@ -124,7 +123,7 @@ describe("computeWindowApy — the realised trailing APY (spec §5.3, §9)", () 
   it("measures the 30d window — startPrice 0.999596", () => {
     // Same `now`; the 30d window straddles the 43-day gap in the series, which
     // is why its figure is a third of the 7d one.
-    const w = computeWindowApy(EVENTS, SHARE_PRICE, at("2026-08-25T15:00:00Z"), 30);
+    const w = computeWindowApy(LAUNCH, EVENTS, SHARE_PRICE, at("2026-08-25T15:00:00Z"), 30);
     expect(w.label).toBe("30d APY");
     expect(w.days).toBe(30);
     expect(w.sinceLaunch).toBe(false);
@@ -136,7 +135,7 @@ describe("computeWindowApy — the realised trailing APY (spec §5.3, §9)", () 
     // now 2026-07-08T11:27:59Z: 12 days after launch, share price 0.999596 —
     // still below the 1.000000 the accountant started at, so the figure is
     // negative and is rendered as such, never clamped.
-    const w = computeWindowApy(EVENTS, 0.999596, at("2026-07-08T11:27:59Z"), 30);
+    const w = computeWindowApy(LAUNCH, EVENTS, 0.999596, at("2026-07-08T11:27:59Z"), 30);
     expect(w.label).toBe("APY since launch");
     expect(w.windowDays).toBe(30);
     expect(w.sinceLaunch).toBe(true);
@@ -153,7 +152,7 @@ describe("computeWindowApy — the realised trailing APY (spec §5.3, §9)", () 
       // is 0.00 %. The series is truncated at `now` first — see "the window's
       // start" below.
       const now = at("2026-08-10T00:00:00Z");
-      const w = computeWindowApy(seriesAt(now), 0.999596, now, windowDays);
+      const w = computeWindowApy(LAUNCH, seriesAt(now), 0.999596, now, windowDays);
       expect(w.label).toBe(`${windowDays}d APY`);
       expect(w.noUpdates).toBe(true);
       expect(w.sinceLaunch).toBe(false);
@@ -176,7 +175,7 @@ describe("computeWindowApy — the realised trailing APY (spec §5.3, §9)", () 
     // starts it.
     const onT0 = { block: 1, logIndex: 0, time: t0, oldPrice: 0.5, newPrice: 0.6 };
     const justAfter = { block: 2, logIndex: 1, time: t0 + 1, oldPrice: 0.9, newPrice: 1 };
-    const w = computeWindowApy([onT0, justAfter], 1, now, 7);
+    const w = computeWindowApy(LAUNCH, [onT0, justAfter], 1, now, 7);
     expect(w.noUpdates).toBe(false);
     // startPrice 0.9 (justAfter.oldPrice), not 0.5: (1/0.9 − 1) × 365/7 × 100.
     expect(w.apyPct).toBeCloseTo(((1 / 0.9 - 1) * 365 * 100) / 7, 9);
@@ -185,15 +184,15 @@ describe("computeWindowApy — the realised trailing APY (spec §5.3, §9)", () 
   it("does not bound the window at `now` — truncating is the caller's job", () => {
     // Same series, same `now`, truncated or not: the difference is the caller's.
     const now = at("2026-08-10T00:00:00Z");
-    expect(computeWindowApy(EVENTS, 0.999596, now, 3).noUpdates).toBe(false);
-    expect(computeWindowApy(seriesAt(now), 0.999596, now, 3).noUpdates).toBe(true);
+    expect(computeWindowApy(LAUNCH, EVENTS, 0.999596, now, 3).noUpdates).toBe(false);
+    expect(computeWindowApy(LAUNCH, seriesAt(now), 0.999596, now, 3).noUpdates).toBe(true);
   });
 
   // --- §5.3 [fill-in]: a vault younger than a day ----------------------------
   it("has no figure for a vault younger than a day", () => {
     // Annualising a few hours is noise, so there is no figure yet: "—".
-    const twelveHoursIn = DEPLOY_TIMESTAMP + 12 * 3600;
-    const w = computeWindowApy([], 1.000002, twelveHoursIn, 7);
+    const twelveHoursIn = SERIES_LAUNCH + 12 * 3600;
+    const w = computeWindowApy(LAUNCH, [], 1.000002, twelveHoursIn, 7);
     expect(w.label).toBe("APY since launch");
     expect(w.sinceLaunch).toBe(true);
     expect(w.days).toBe(0.5);
@@ -202,11 +201,56 @@ describe("computeWindowApy — the realised trailing APY (spec §5.3, §9)", () 
   });
 
   it("has a figure once the vault is exactly one day old", () => {
-    const oneDayIn = DEPLOY_TIMESTAMP + 24 * 3600;
-    const w = computeWindowApy([], 1.0001, oneDayIn, 7);
+    const oneDayIn = SERIES_LAUNCH + 24 * 3600;
+    const w = computeWindowApy(LAUNCH, [], 1.0001, oneDayIn, 7);
     expect(w.days).toBe(1);
     expect(w.apyPct).toBeCloseTo(3.65, TOL_DIGITS);
     expect(fmtPct(w.apyPct)).toBe("3.65%");
+  });
+});
+
+// The widget serves two products with different launches, so "does this window
+// predate the vault?" has two answers for the same window at the same moment.
+// These vectors hold the derivation to the anchors it is handed rather than to
+// anything it knows on its own.
+describe("computeWindowApy — per-vault launch anchors", () => {
+  const now = at("2026-08-25T15:00:00Z");
+  // A vault deployed fifteen days before `now`: the same 30-day window that is
+  // an ordinary trailing window on the older vault predates this one.
+  const YOUNG: LaunchAnchors = {
+    deployTimestamp: now - 15 * 86400,
+    initialSharePrice: 1,
+  };
+
+  it("measures the same window against each vault's own launch", () => {
+    const older = computeWindowApy(LAUNCH, EVENTS, SHARE_PRICE, now, 30);
+    expect(older.sinceLaunch).toBe(false);
+    expect(older.days).toBe(30);
+
+    const younger = computeWindowApy(YOUNG, EVENTS, SHARE_PRICE, now, 30);
+    expect(younger.sinceLaunch).toBe(true);
+    expect(younger.days).toBe(15);
+    expect(younger.label).toBe("APY since launch");
+  });
+
+  it("opens a since-launch figure at the anchored launch share price", () => {
+    // A vault whose accountant started above par: the growth measured is
+    // 1.001004 / 1.000500, not 1.001004 / 1.000000.
+    const abovePar: LaunchAnchors = { ...YOUNG, initialSharePrice: 1.0005 };
+    const w = computeWindowApy(abovePar, EVENTS, SHARE_PRICE, now, 30);
+    expect(w.apyPct).toBeCloseTo(((SHARE_PRICE / 1.0005 - 1) * 365 * 100) / 15, 9);
+  });
+
+  it("still reports no updates in an empty window on a young vault", () => {
+    // Inside the window and after the vault's launch, but with no update in it:
+    // the share price did not move, so the figure is an exact zero — the same
+    // behaviour a window with no events has on the older vault.
+    const quiet: LaunchAnchors = { deployTimestamp: at("2026-08-01T00:00:00Z"), initialSharePrice: 1 };
+    const quietNow = at("2026-08-10T00:00:00Z");
+    const w = computeWindowApy(quiet, seriesAt(quietNow), 0.999596, quietNow, 3);
+    expect(w.sinceLaunch).toBe(false);
+    expect(w.noUpdates).toBe(true);
+    expect(fmtPct(w.apyPct)).toBe("0.00%");
   });
 });
 
@@ -256,6 +300,7 @@ describe("projectEarnings (spec §9, §5.6, §6.3)", () => {
 describe("apyHint — the hero hint each APY state reads (spec §6.4)", () => {
   it.each([3, 7, 30])("reads a normal %sd trailing window", (windowDays) => {
     const w = computeWindowApy(
+      LAUNCH,
       EVENTS,
       SHARE_PRICE,
       at("2026-08-25T15:00:00Z"),
@@ -271,16 +316,17 @@ describe("apyHint — the hero hint each APY state reads (spec §6.4)", () => {
   it("reads since launch when the window predates the vault", () => {
     // The 30d window predates the vault: 12 days of history, measured since
     // launch.
-    const w = computeWindowApy(EVENTS, 0.999596, at("2026-07-08T11:27:59Z"), 30);
+    const w = computeWindowApy(LAUNCH, EVENTS, 0.999596, at("2026-07-08T11:27:59Z"), 30);
     expect(apyHint(w)).toBe("Since launch (12 days), annualised — not guaranteed.");
   });
 
   it("counts whole elapsed days only", () => {
     // A part-day of vault age counts only whole elapsed days: 12.7 ⇒ "12 days".
     const w = computeWindowApy(
+      LAUNCH,
       EVENTS,
       0.999596,
-      DEPLOY_TIMESTAMP + Math.round(12.7 * 86400),
+      SERIES_LAUNCH + Math.round(12.7 * 86400),
       30
     );
     expect(apyHint(w)).toBe("Since launch (12 days), annualised — not guaranteed.");
@@ -288,14 +334,14 @@ describe("apyHint — the hero hint each APY state reads (spec §6.4)", () => {
 
   it.each([3, 7])("reads no update in the last %s days", (windowDays) => {
     const now = at("2026-08-10T00:00:00Z");
-    const w = computeWindowApy(seriesAt(now), 0.999596, now, windowDays);
+    const w = computeWindowApy(LAUNCH, seriesAt(now), 0.999596, now, windowDays);
     expect(apyHint(w)).toBe(`No share-price updates in the last ${windowDays} days.`);
     // The number beside this hint is an exact zero, not a "—".
     expect(fmtPct(w.apyPct)).toBe("0.00%");
   });
 
   it("reads under-a-day for a vault younger than a day", () => {
-    const w = computeWindowApy([], 1.000002, DEPLOY_TIMESTAMP + 12 * 3600, 7);
+    const w = computeWindowApy(LAUNCH, [], 1.000002, SERIES_LAUNCH + 12 * 3600, 7);
     expect(apyHint(w)).toBe("Since launch (<1 day) — APY available after 24 hours.");
     expect(fmtPct(w.apyPct)).toBe("—");
   });

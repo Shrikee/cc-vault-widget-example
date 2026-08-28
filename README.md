@@ -69,7 +69,7 @@ redemptions keep working.
 
 ## Deployed addresses (Polygon PoS, chainId 137)
 
-Defined in `src/config/vault.ts` and verified against the live contracts
+Declared in `src/config/vaults.json` and verified against the live contracts
 (see [On-chain verification](#on-chain-verification-2026-08-27) below).
 
 The vault is deployed at the **same addresses on Polygon as on Ethereum**
@@ -123,10 +123,21 @@ WagmiProvider → QueryClientProvider → ConnectKitProvider
   → BoringVaultV1Provider → Toaster → App
 ```
 
-- `src/config/vault.ts` — addresses, tokens, behavioral params (verified, see below).
+- `src/config/vaults.json` — the vault registry: both Coinchange products, in
+  the shape a vault entry takes in the solver service's roster so the two files
+  diff by eye. Only the 24h product is rendered today.
+- `src/lib/vaultRegistry.ts` — the registry's shape and the guard that parses
+  it, so a missing address or a bad block number fails at load with a message
+  naming the field.
+- `src/config/vaults.ts` — where the JSON meets the guard; also the provenance
+  of the four values no chain read can confirm.
+- `src/config/vault.ts` — the widget's behavioural params, plus a singular view
+  of the default product for the hooks that still take their vault at module
+  scope.
 - `src/config/wagmi.ts` — wagmi config + ethers read provider.
-- `src/config/history.ts` — history-scan parameters: deployment blocks, event
-  topics, trailing windows, chunk span and chunk concurrency.
+- `src/config/history.ts` — history-scan parameters that belong to the protocol
+  rather than to a product: event topics, trailing windows, chunk span and
+  chunk concurrency.
 - `src/lib/boringVault.ts` — the single import boundary to the library (see notes).
 - `src/lib/useEthersSigner.ts` — local viem→ethers signer adapter (see notes).
 - `src/lib/apy.ts` — the pure yield derivations: realised trailing APY per

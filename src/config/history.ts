@@ -3,27 +3,31 @@
 //
 // The yield figures are derived on-chain by the widget itself (ADR-0001): the
 // accountant's ExchangeRateUpdated events give the share-price history, the
-// Teller's Deposit events a wallet's average deposit cost. Everything the scans
-// need that is fixed at deploy time lives here.
+// Teller's Deposit events a wallet's average deposit cost.
 //
-// VERIFY these against the live contracts when the vault is redeployed —
-// deployment blocks and the deployment timestamp are vault-specific.
+// What a scan needs divides in two, and the division is the point of this file:
+// the mechanics below — chunk span, trailing windows, event topics, the
+// share-price unit, the concurrency limit — belong to the PROTOCOL and are the
+// same whichever product is being scanned, so they stay global. Anything that
+// differs by product is vault identity and lives in the registry
+// (src/config/vaults.json), which is also where the verification date and the
+// provenance notes are.
 // =============================================================================
+import { DEFAULT_VAULT } from "./vaults";
 
-// Deployment blocks (Polygon PoS, 2026-08-12T18:05:49Z). Found by bisecting
-// eth_getCode against the live chain on 2026-08-27.
-export const DEPLOY_BLOCKS = {
-  vault: 91901943,
-  accountant: 91901948,
-  teller: 91901950,
-} as const;
+// The default product's deploy blocks and launch instant, re-exported from the
+// registry for the hooks that still take their vault at module scope. They go
+// when those hooks take a vault argument.
+export const DEPLOY_BLOCKS = DEFAULT_VAULT.ui.deployBlocks;
 
-// Block 91901948 — the accountant's deployment. Windows reaching further back
-// are measured since launch instead.
-export const DEPLOY_TIMESTAMP = 1786557949; // 2026-08-12T18:05:49Z
+// The accountant's deploy block timestamp. Windows reaching further back are
+// measured since launch instead.
+export const DEPLOY_TIMESTAMP = DEFAULT_VAULT.ui.deployTimestamp;
 
-// The accountant's constructor sets exchangeRate = 1.000000 base/share, so the
-// share price at launch needs no lookup.
+// The accountant's constructor sets exchangeRate = 1.000000 base/share on both
+// products, so the share price at launch needs no lookup. Protocol-level, not
+// per vault — but it is handed to computeWindowApy as a launch anchor, because
+// which vault a since-launch figure opens against is the caller's to say.
 export const INITIAL_SHARE_PRICE = 1;
 
 // Provider cap on a ranged eth_getLogs: toBlock − fromBlock ≤ 10,000. Measured

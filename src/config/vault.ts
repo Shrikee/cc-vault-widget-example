@@ -1,60 +1,65 @@
 import type { Token } from "../lib/boringVault";
+import { DEFAULT_VAULT, ROSTER } from "./vaults";
 
 // =============================================================================
-// Coinchange "Yield Prime" vault — production parameters (Polygon PoS).
+// The one vault the widget currently renders, read off the registry.
 //
-// The vault is deployed at the SAME addresses on Polygon as on Ethereum
-// (deterministic deployment), so the address list below is unchanged from the
-// mainnet build — but the chain, the asset addresses and the explorer are not.
+// Every value below used to be a literal here; the addresses, deploy figures
+// and share-token identity now come from src/config/vaults.json (see
+// src/config/vaults.ts for the verification date and the provenance of the four
+// values no chain read can confirm). This module is what is left: the widget's
+// own behavioural parameters, plus a singular view of the default product for
+// the components and hooks that still take their vault at module scope.
 //
-// Verified on-chain against Polygon (chainId 137) on 2026-08-27:
-//   vault.name()="Yield Prime", symbol()="CCUSD", decimals()=18
-//   accountant.getRate()=1000000 (1 share = 1.000000 USDT), isPaused()=false
-//   accountant.base()=0xc2132D05…58e8F (Polygon USDT)
-//   teller.shareLockPeriod()=86400, teller.isPaused()=false
-//   AtomicQueue.isPaused()=false
-//
-// VERIFY these against the live contracts before each release — addresses
-// change when a vault is redeployed.
+// That singular view is temporary. The next change gives every vault-scoped
+// component and hook an explicit vault argument, at which point this module
+// goes away and the registry is read directly.
 //
 // NOTE on the withdraw model: this vault redeems via the audited AtomicQueue
 // (solver-priced). The DelayedWithdraw contract is deployed but left
 // UNUSED (allowPublicWithdraws=false), so the frontend uses the queue flow.
 // =============================================================================
 
-export const CHAIN = "polygon" as const;
-export const CHAIN_ID = 137; // Polygon PoS
+export const CHAIN = ROSTER.chain.key;
+export const CHAIN_ID = ROSTER.chain.chainId;
 
 // Human-readable chain name — used in UI copy and the wrong-network prompt.
-export const CHAIN_LABEL = "Polygon";
+export const CHAIN_LABEL = ROSTER.chain.label;
 
 // Vault share token identity.
-export const VAULT_NAME = "Yield Prime";
-export const SHARE_SYMBOL = "CCUSD";
-export const VAULT_DECIMALS = 18; // vault.decimals() — share token has 18 decimals
+export const VAULT_NAME = DEFAULT_VAULT.ui.name;
+export const SHARE_SYMBOL = DEFAULT_VAULT.ui.symbol;
+export const VAULT_DECIMALS = DEFAULT_VAULT.ui.decimals;
 
+// The registry names these the way the solver roster does; the library and the
+// hooks here name two of them differently, so the mapping happens once, here.
 export const CONTRACTS = {
-  vault: "0x844a9d1B20A3016610B5270F32eDDCc1E27787cC",
-  teller: "0xbC65b430d01E267652694503ca1ae5543C915bB9",
-  accountant: "0x665d264e867e45f2bFCAeE4DD1C65A784FE9d4E9",
-  lens: "0x5732789EB6Eef65173bA732EE3b05f3f23AB840b",
+  vault: DEFAULT_VAULT.addresses.vault,
+  teller: DEFAULT_VAULT.addresses.teller,
+  accountant: DEFAULT_VAULT.addresses.accountant,
+  lens: DEFAULT_VAULT.addresses.lens,
   // AtomicQueue — shares are redeemed by submitting a request here; an off-chain
   // solver fills it. Passed to the provider as `withdrawQueueContract`.
-  withdrawQueue: "0x1479aea1a79e10a6B8c3925f66a7b1dFe0FEeF93",
-  atomicSolver: "0x6c0f80f755f3C094587E4b5242A0D6570B2F3EAA",
+  withdrawQueue: DEFAULT_VAULT.addresses.queue,
+  atomicSolver: DEFAULT_VAULT.addresses.solver,
   // delayWithdraw is deployed but unused for this vault.
 } as const;
 
 // -----------------------------------------------------------------------------
-// Assets. Base/unit-of-account is USDT (6 decimals) — accountant.base().
+// Assets. Base/unit-of-account is USDT (6 decimals) — accountant.base(), and the
+// registry's `want`, which both products name identically.
 //
 // USDT is the ONLY accepted deposit asset on Polygon: teller.isSupported() is
 // false for both native USDC (0x3c49…3359) and bridged USDC.e (0x2791…4174),
 // so offering USDC here would let a user pick an asset whose deposit reverts.
 // Re-check isSupported() before adding one back.
+//
+// The address comes from the registry; the decimals and the display metadata do
+// not, because they are not vault identity — they are what the widget needs to
+// render a token the roster only has to address.
 // -----------------------------------------------------------------------------
 export const USDT: Token = {
-  address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+  address: DEFAULT_VAULT.addresses.want,
   decimals: 6,
   displayName: "USDT",
   image: "https://assets.coingecko.com/coins/images/325/small/Tether.png",
@@ -71,8 +76,10 @@ export const WITHDRAW_TOKEN: Token = USDT;
 // Behavioral parameters. These drive UX copy, validation, and the redeem call.
 // -----------------------------------------------------------------------------
 // Anti-MEV deposit lock — shares can't be transferred (or redeemed) for this
-// long after a deposit. teller.shareLockPeriod() = 86400.
-export const SHARE_LOCK_PERIOD = 86400; // 1 day
+// long after a deposit. teller.shareLockPeriod() = 86400 on both products.
+// NOT the vesting term: on the 30d product the lock is still one day while the
+// term is thirty, which is the hazard stage 2 exists to price.
+export const SHARE_LOCK_PERIOD = DEFAULT_VAULT.ui.shareLockPeriod;
 
 // AtomicQueue redemption "discount" = the haircut vs NAV the user accepts so the
 // solver can fill and keep the spread. The contract caps it at MAX_DISCOUNT (1%)
@@ -86,6 +93,6 @@ export const WITHDRAW_DISCOUNT_PCT_MAX = 1; // contract MAX_DISCOUNT = 0.01e6 = 
 export const WITHDRAW_VALID_DAYS_DEFAULT = 7;
 
 // Block explorer for tx links / address confirmations.
-export const EXPLORER = "https://polygonscan.com";
+export const EXPLORER = ROSTER.chain.explorer;
 export const explorerTx = (hash: string) => `${EXPLORER}/tx/${hash}`;
 export const explorerAddress = (addr: string) => `${EXPLORER}/address/${addr}`;

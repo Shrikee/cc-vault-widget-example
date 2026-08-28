@@ -4,8 +4,8 @@
 // getting wrong: a full scan runs once per wallet, a tail scan resumes from
 // where the last one stopped, and the wallet can change (or change back) while
 // a scan is still in flight. This module is that bookkeeping, pure and on its
-// own, so scripts/apy-vectors.mjs pins the rules and the hook only has to do
-// what it is told. No React, no network, no bundler globals.
+// own, so ./scanRuns.test.ts pins the rules and the hook only has to do what it
+// is told. No React, no network, no DOM.
 //
 // The rules (spec §5.5, §5.7):
 //   • One full scan per wallet key; a tail scan resumes from the cursor.

@@ -62,9 +62,12 @@ export const TOPIC_DEPOSIT_REFUNDED =
 // a full 30-day span is ~173 chunks, so a cold scan takes a few seconds.
 export const DEFAULT_CHUNKS_IN_FLIGHT = 4;
 
-// Read lazily, not at module scope: src/lib/apy.ts imports the constants above
-// and is run outside the bundler by scripts/apy-vectors.mjs, where
-// `import.meta.env` does not exist.
+// Read inside a function rather than at module scope. That began as a hard
+// constraint: src/lib/apy.ts imports the constants above, and the vectors drove
+// it under plain Node, where `import.meta.env` does not exist. The vectors run
+// under Vitest now, which serves them through Vite's pipeline, so the
+// constraint is gone — the function stays because nothing needs the value
+// frozen at module load and it keeps the fallback in one place.
 export function historyChunksInFlight(): number {
   const parsed = Number(import.meta.env.VITE_HISTORY_CHUNKS_IN_FLIGHT);
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_CHUNKS_IN_FLIGHT;

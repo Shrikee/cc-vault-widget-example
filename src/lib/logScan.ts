@@ -1,8 +1,5 @@
 import type { Hex, PublicClient } from "viem";
-// The explicit `.ts` extension keeps this module loadable by plain Node (which
-// resolves no extensions), because src/lib/apy.ts imports the decode helpers
-// below and scripts/apy-vectors.mjs drives that module directly.
-import { LOG_CHUNK_SPAN } from "../config/history.ts";
+import { LOG_CHUNK_SPAN } from "../config/history";
 
 // Chunked eth_getLogs scan — the one read the yield figures are built on.
 //

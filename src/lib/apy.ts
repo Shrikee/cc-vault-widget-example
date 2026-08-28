@@ -3,15 +3,19 @@
 // The share price's growth over a trailing window, annualised linearly
 // (× 365 / days of the window): what the vault actually returned, never a
 // target or a forecast. Arithmetic and log decoding only — no network, no
-// React, no bundler globals — so scripts/apy-vectors.mjs can drive this exact
-// code (hence the explicit `.ts` extensions below: Node resolves none).
+// React, no DOM — so ./apy.test.ts drives this exact code.
+//
+// The imports below used to carry explicit `.ts` extensions: the vectors ran
+// under plain Node, which resolves none. They run under Vitest now, through
+// Vite's own resolver, so the extensions are gone with the constraint that
+// forced them.
 import {
   DEPLOY_TIMESTAMP,
   INITIAL_SHARE_PRICE,
   SHARE_PRICE_UNIT,
   TOPIC_DEPOSIT_REFUNDED,
-} from "../config/history.ts";
-import { dataWord, type RawLog } from "./logScan.ts";
+} from "../config/history";
+import { dataWord, type RawLog } from "./logScan";
 
 // One accountant ExchangeRateUpdated event: the share price before and after
 // one update, in the base asset (the uint96 log value ÷ 1e6, e.g. 1.001004).
@@ -123,7 +127,7 @@ export function projectEarnings(
 // It lives beside the derivation rather than in the component because the four
 // states it distinguishes ARE the derivation's states: whichever branch of
 // computeWindowApy produced the figure decides the sentence under it, so the two
-// stay in step and scripts/apy-vectors.mjs can hold the copy to the spec. The
+// stay in step and ./apy.test.ts can hold the copy to the spec. The
 // fifth hero hint — the RPC-failure one — has no WindowApy to describe and stays
 // in the component.
 // -----------------------------------------------------------------------------
@@ -155,7 +159,7 @@ export function trailingWindowHint(windowDays: number): string {
 //
 // Position value minus what the wallet paid for those shares, at its average
 // deposit cost per share. Pure arithmetic over the wallet's own Teller Deposit
-// events, so scripts/apy-vectors.mjs drives this exact code.
+// events, so ./apy.test.ts drives this exact code.
 // =============================================================================
 
 // One decoded Teller log for a wallet, from the single scan that fetches both

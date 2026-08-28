@@ -43,13 +43,14 @@ npm run dev              # http://localhost:5173
 ```bash
 npm run build            # tsc --noEmit + vite build
 npm run typecheck
-npm run test:apy         # vectors for the yield figures (needs Node >= 22.6)
+npm test                 # Vitest: the pure seams (yield figures, scan bookkeeping)
 npm run test:withdraw    # queueWithdraw 18-decimal overflow guard
 ```
 
-`npm run test:apy` needs **Node ≥ 22.6**: it imports the pure TypeScript modules
-directly and relies on Node's type stripping to load them. `package.json`
-declares that floor in `engines`.
+`npm test` runs [Vitest](https://vitest.dev) over `src/**/*.test.ts` in a Node
+environment, through the app's own `vite.config.ts` — no DOM library and no
+component tests. `npm run test:withdraw` stays a plain Node script: it guards a
+packaged-library bug (see the caveats below) and is unrelated to the seams above.
 
 ### Environment
 
@@ -141,8 +142,8 @@ WagmiProvider → QueryClientProvider → ConnectKitProvider
   deposit cost), `usePauseStatus`, `useTokenBalance`, `useStatusToasts`,
   `useNow`.
 - `src/components/*` — custom UI.
-- `scripts/apy-vectors.mjs` — `npm run test:apy`: the APY, earnings and
-  scan-bookkeeping vectors, driving the real modules under plain Node.
+- `src/lib/*.test.ts` — the vectors, driving the real modules: the APY,
+  earnings and projection derivations, and the scan bookkeeping.
 
 ---
 

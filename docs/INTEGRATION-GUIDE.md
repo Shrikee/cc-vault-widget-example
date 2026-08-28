@@ -345,7 +345,7 @@ earnings = balanceOf(wallet) / 1e18 × (r_end − avgCost)
 - **Value each deposit in its own asset's decimals** (USDC/USDT: 6, `shareAmount` always 18). An unknown deposit asset is an error state, not a guess.
 - **Do not use `teller.depositNonce()` as a deposit count** — the deployed counter diverges from upstream.
 
-Reference implementation: [`src/hooks/useShareHistory.ts`](../src/hooks/useShareHistory.ts) (the once-per-page-load share-price scan), [`src/hooks/useWindowApys.ts`](../src/hooks/useWindowApys.ts) (all three windows, derived in one place), [`src/hooks/useDepositHistory.ts`](../src/hooks/useDepositHistory.ts) (a wallet's deposits and the tail re-scan), [`src/lib/apy.ts`](../src/lib/apy.ts) (the pure derivations, pinned by `npm run test:apy`) and [`src/lib/logScan.ts`](../src/lib/logScan.ts) (the chunked, concurrency-limited scan).
+Reference implementation: [`src/hooks/useShareHistory.ts`](../src/hooks/useShareHistory.ts) (the once-per-page-load share-price scan), [`src/hooks/useWindowApys.ts`](../src/hooks/useWindowApys.ts) (all three windows, derived in one place), [`src/hooks/useDepositHistory.ts`](../src/hooks/useDepositHistory.ts) (a wallet's deposits and the tail re-scan), [`src/lib/apy.ts`](../src/lib/apy.ts) (the pure derivations, pinned by `npm test`) and [`src/lib/logScan.ts`](../src/lib/logScan.ts) (the chunked, concurrency-limited scan).
 
 ### 6.4 Deposit (direct)
 

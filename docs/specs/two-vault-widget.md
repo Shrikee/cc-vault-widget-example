@@ -200,7 +200,7 @@ round-trip. Stage 2 is specified separately and is out of scope here.
         "eventsFromBlock",     // ledger floor, from the solver roster
         "vestingSeconds",      // product vesting term; unused until stage 2
         "ui": { "name", "symbol", "decimals", "shareLockPeriod",
-                "deployBlocks": { "accountant", "teller" },
+                "deployBlocks": { "vault", "accountant", "teller" },
                 "deployTimestamp" }
       }
     ]

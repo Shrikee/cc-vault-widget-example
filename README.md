@@ -223,6 +223,8 @@ nothing outside those two panels depends on the library's context.
   requests may be in flight and how fast starts may be paced.
 - `src/lib/scanRuns.ts` — which deposit scan may run and which may commit
   (wallet switches, tail scans, failures).
+- `src/lib/requestFill.ts` — what it means for a redemption request to have
+  vanished from a queue, and the several ways of vanishing that are not a fill.
 - `src/hooks/*` — `useProductReads` (everything the widget reads about one
   product, assembled once per product), `useVaultSelection` (the URL side of the
   selection, holding no rules), `useVaultMetrics`, `useUserPosition`,

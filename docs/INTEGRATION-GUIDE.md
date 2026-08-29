@@ -712,7 +712,8 @@ function checkUserDeposit(address account, ERC20 depositAsset, uint256 depositAm
 | `src/hooks/usePauseStatus.ts` / `src/components/PauseBanner.tsx` | Polling the three pause flags + the suspension banner (§10) |
 | `src/hooks/useStatusToasts.ts` | Driving toasts off `depositStatus`/`withdrawStatus` |
 | `src/components/DepositPanel.tsx` | Full deposit UX: validation, confirm dialog, share-lock notice |
-| `src/components/WithdrawPanel.tsx` | Full redemption UX: spread/validity controls, replace notice, Stop |
+| `src/components/WithdrawPanel.tsx` | Full redemption UX: spread/validity controls, replace notice |
+| `src/components/RedemptionsCard.tsx` | Open requests in every queue, and the Stop (approval-revoke) action |
 | `src/components/RequestRow.tsx` | Request state rendering (open/filling/stopped/expired) |
 | `scripts/queue-withdraw-regression.cjs` | CI guard that the 1.6.3 overflow fix is present and effective (issue #1) |
 

@@ -3,7 +3,6 @@ import { Contract, type JsonRpcSigner } from "ethers";
 
 import { explorerTx } from "../config/chain";
 import type { WithdrawRequestState } from "../hooks/useWithdrawRequest";
-import { openRedemptions } from "../lib/redemptions";
 import type { Vault } from "../lib/vaultRegistry";
 import { RequestRow } from "./RequestRow";
 import { useToast } from "./Toaster";
@@ -53,24 +52,32 @@ export function RedemptionsCard({
   rightChain: boolean;
 }) {
   const { show, dismiss } = useToast();
-  // The vault whose stop is in flight, or null. An id and not a boolean so the
-  // spinner lands on the row it belongs to; and while it is set every stop
-  // control is disabled, so a depositor cannot queue two wallet prompts for two
-  // products against one signer.
-  const [stoppingId, setStoppingId] = useState<string | null>(null);
+  // Whether a stop is in flight — and while one is, EVERY stop control is
+  // disabled, not only the row it came from. One wallet signs for both
+  // products, and two prompts queued against it is a depositor confirming one
+  // product's revoke while reading the other's.
+  const [stopping, setStopping] = useState(false);
 
-  const rows = openRedemptions(
-    products.map(({ vault, withdrawRequest }) => ({
-      vault,
-      request: withdrawRequest.request,
-      refetchRequest: withdrawRequest.refetch,
-    }))
+  // The products with something open, in the roster's order — so the rows do
+  // not reshuffle under a depositor when one queue's poll resolves before the
+  // other's. The selection is deliberately not consulted: the card exists
+  // precisely so that what is on screen does not decide what money is visible.
+  const rows = products.flatMap(({ vault, withdrawRequest }) =>
+    withdrawRequest.request
+      ? [{ vault, request: withdrawRequest.request, refetch: withdrawRequest.refetch }]
+      : []
   );
   // A queue that could not be read is not a queue with nothing in it. Saying
   // "no open redemption requests" over a failed read would be a claim about
-  // money the widget cannot see, so the reason is shown per product instead.
+  // money the widget cannot see, so the reason is shown per product instead —
+  // beside that product's last known row, when there is one, since the row is
+  // then what was true at the last successful read rather than now.
   const unreadable = products.filter((p) => p.withdrawRequest.error !== null);
   const loading = products.some((p) => p.withdrawRequest.loading);
+  // Nothing can be sent without a signer on the right chain, and a control with
+  // nothing behind it must not look live. The page's own network banner is
+  // where the wrong-chain case is explained.
+  const stopDisabled = stopping || !signer || !rightChain;
 
   // Stop a pending request from being filled — the "cancel" this deployment
   // supports. The raw cancel (zeroing the request via `updateAtomicRequest`) is
@@ -99,9 +106,9 @@ export function RedemptionsCard({
   // lands; that is the honest outcome of asking for two things at once, and no
   // part of it is wrong.
   async function runStop(vault: Vault, refetchRequest: () => void) {
-    if (!signer || stoppingId !== null) return;
+    if (!signer || stopping) return;
     if (vault.id !== selectedId) onSelect(vault.id);
-    setStoppingId(vault.id);
+    setStopping(true);
     const tid = show("Revoking approval…", "loading");
     try {
       const share = new Contract(
@@ -129,7 +136,7 @@ export function RedemptionsCard({
       dismiss(tid);
       show((e as Error)?.message ?? "Failed to revoke approval", "error");
     } finally {
-      setStoppingId(null);
+      setStopping(false);
     }
   }
 
@@ -145,20 +152,18 @@ export function RedemptionsCard({
 
   return (
     <Card title="Open redemptions">
-      {rows.map(({ vault, request, refetchRequest }) => (
+      {rows.map(({ vault, request, refetch }) => (
         <div className="redemption" key={vault.id}>
           {/* The product's own name above its row: the row itself carries the
               share symbol, and between them a depositor holding requests in
               both queues can tell which redemption is which. */}
           <h3 className="redemption__product">{vault.ui.name}</h3>
+          {/* The row's `busy` is what disables its stop control. */}
           <RequestRow
             vault={vault}
             request={request}
-            // No stop control without a working action behind it: with no
-            // signer, or on the wrong network, the transaction cannot be sent,
-            // so the control is disabled rather than dead.
-            busy={stoppingId !== null || !signer || !rightChain}
-            onStop={() => runStop(vault, refetchRequest)}
+            busy={stopDisabled}
+            onStop={() => runStop(vault, refetch)}
           />
         </div>
       ))}

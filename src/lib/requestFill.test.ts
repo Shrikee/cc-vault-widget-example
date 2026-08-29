@@ -1,30 +1,19 @@
-// What a queue read means, and which queue reads reach the card —
-// src/lib/redemptions.ts.
+// What a queue read means — src/lib/requestFill.ts.
 //
-// Both AtomicQueues are polled now, one hook instance per product, so the two
-// decisions this file pins are the two the second queue makes dangerous:
-// whether a request that is no longer there was FILLED, and which of the two
-// queues' requests the side-rail card lists.
-//
-// The fill question is the sharp one. A fill is announced from an absence — the
-// struct going to zero — and an absence has more than one cause once there are
-// two queues to read: the other product's poll resolving first, a wallet
-// changing, a product being switched. Every vector below is a way of being
-// absent that is NOT a fill.
+// A fill is announced from an absence: the struct going to zero. An absence has
+// more than one cause once two queues are polled — another queue's read, a
+// wallet changing, a request being replaced — and every vector below but the
+// first three is a way of being absent that is NOT a fill.
 import { describe, expect, it } from "vitest";
 
-import {
-  isFillTransition,
-  openRedemptions,
-  type QueueSnapshot,
-} from "./redemptions";
+import { isFillTransition, type QueueSnapshot } from "./requestFill";
 
 const NOW = 1_800_000_000;
 // The two wallets the other vectors in this repository are anchored to; here
 // they are only two distinct owners, and nothing is claimed about what either
 // holds.
-const WALLET = "0x463639c13d578dd17e8164d83ab7fc6135d130f9";
-const OTHER_WALLET = "0xb4b0a5b761133860a39d2e89d59a8c6f6769cbe0";
+const WALLET = "0x463639c13d578dd17e8164d83ab7fc6135d130f9" as const;
+const OTHER_WALLET = "0xb4b0a5b761133860a39d2e89d59a8c6f6769cbe0" as const;
 
 // An open request in the 24h queue, well inside its deadline.
 const OPEN: QueueSnapshot = {
@@ -96,43 +85,5 @@ describe("an absence that is not a fill", () => {
     // A new request overwrites the struct in place: still non-zero, no fill.
     const replaced = { ...OPEN, offerAmount: 2_000_000_000_000_000_000n };
     expect(isFillTransition(OPEN, replaced, NOW)).toBe(false);
-  });
-});
-
-describe("the requests the card lists", () => {
-  const product = (id: string, request: { shares: number } | null) => ({
-    vault: { id },
-    request,
-  });
-
-  it("lists a request from each queue, in the roster's order", () => {
-    const listed = openRedemptions([
-      product("coinchange-24h-polygon", { shares: 1.05 }),
-      product("coinchange-30d-polygon", { shares: 0.05 }),
-    ]);
-    expect(listed.map((r) => r.vault.id)).toEqual([
-      "coinchange-24h-polygon",
-      "coinchange-30d-polygon",
-    ]);
-  });
-
-  it("lists the unselected product's request as readily as the selected one's", () => {
-    // Nothing about a selection reaches here — which is the point of the card.
-    const listed = openRedemptions([
-      product("coinchange-24h-polygon", null),
-      product("coinchange-30d-polygon", { shares: 0.05 }),
-    ]);
-    expect(listed.map((r) => r.vault.id)).toEqual(["coinchange-30d-polygon"]);
-    // And the request is known to be there, so the row needs no null check.
-    expect(listed[0].request.shares).toBe(0.05);
-  });
-
-  it("lists nothing when neither queue holds a request", () => {
-    expect(
-      openRedemptions([
-        product("coinchange-24h-polygon", null),
-        product("coinchange-30d-polygon", null),
-      ])
-    ).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { erc20Abi } from "viem";
 import { useReadContract } from "wagmi";
 import { WITHDRAW_TOKEN } from "../config/tokens";
-import { isFillTransition, type QueueSnapshot } from "../lib/redemptions";
+import { isFillTransition, type QueueSnapshot } from "../lib/requestFill";
 import { nowSeconds } from "../lib/time";
 import type { Vault } from "../lib/vaultRegistry";
 
@@ -66,7 +66,7 @@ const ATOMIC_QUEUE_ABI = [
 //
 // `onFilled` fires when a poll observes THIS product's request transition from
 // open to zeroed — the decision, and the several ways of vanishing that are not
-// that, are in ../lib/redemptions.ts. The caller is told nothing about which
+// that, are in ../lib/requestFill.ts. The caller is told nothing about which
 // product filled because it does not need telling: it handed this instance the
 // vault, so the callback it passed is already about that one.
 export function useWithdrawRequest(
@@ -100,17 +100,18 @@ export function useWithdrawRequest(
   // follows it is one. The callback lives in a ref so a new identity each
   // render doesn't re-run the effect.
   //
-  // The tags are what make the memory mean anything, and polling two queues is
-  // what makes them load-bearing rather than defensive. Each product's read
-  // carries its own wagmi cache key, so one queue's poll can never land in the
-  // other's memory; the tags close the remaining gaps, which are this instance
-  // being handed a different vault and the wallet changing under it. Neither is
-  // a fill, and both look exactly like one.
+  // The tags stay, and the reason is the ref. Elsewhere in this repository a
+  // guard like this was deleted once the value it protected became a call
+  // argument — a read for another wallet answers under another cache key and
+  // cannot land in this one's state (see ../hooks/useUserPosition.ts). That
+  // argument does NOT reach a ref: `lastSeen` is written by this instance and
+  // survives whatever it is next handed, so a memory of one queue can outlive
+  // the vault it was read for, and a memory of one wallet can outlive the
+  // wallet. Both then look exactly like an open request vanishing.
   //
-  // What USED to be the sharp edge here is gone: this hook no longer follows
-  // the selected product, so switching products no longer hands it another
-  // product's queue mid-flight. Its memory is now only ever compared against
-  // more reads of the queue it was mounted for.
+  // Widening to two queues did shrink the everyday case — this hook no longer
+  // follows the selection, so switching products can no longer hand a mounted
+  // instance the other product's queue. It did not remove the ref.
   const onFilledRef = useRef(onFilled);
   useEffect(() => {
     onFilledRef.current = onFilled;

@@ -6,7 +6,7 @@ import { getDefaultConfig } from "connectkit";
 import { CHAIN_ID } from "./chain";
 
 const RPC_URL =
-  import.meta.env.RPC_URL || "https://polygon-rpc.com";
+  import.meta.env.VITE_RPC_URL || "https://polygon-rpc.com";
 
 const WALLETCONNECT_PROJECT_ID =
   import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "";

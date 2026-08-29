@@ -717,7 +717,7 @@ function checkUserDeposit(address account, ERC20 depositAsset, uint256 depositAm
 | `src/components/RequestRow.tsx` | Request state rendering (open/filling/stopped/expired) |
 | `scripts/queue-withdraw-regression.cjs` | CI guard that the 1.6.3 overflow fix is present and effective (issue #1) |
 
-Run it: `npm install && npm run dev` (set `RPC_URL` to an archive-capable endpoint — required for the yield figures of [§6.3](#63-yield-figures-from-the-contracts-alone) — and optionally `VITE_WALLETCONNECT_PROJECT_ID`; see `.env.example`). Reads work with no wallet.
+Run it: `npm install && npm run dev` (set `VITE_RPC_URL` to an archive-capable endpoint — required for the yield figures of [§6.3](#63-yield-figures-from-the-contracts-alone) — and optionally `VITE_WALLETCONNECT_PROJECT_ID`; see `.env.example`). Reads work with no wallet.
 
 ---
 

@@ -5,10 +5,9 @@
 // and one scan at a time. It stops being right the moment two products are on
 // screen. A cold load now starts a share-price scan and a deposit scan for each
 // product, and four scans holding four requests each is sixteen concurrent
-// eth_getLogs against an endpoint where 4 is measured safe and 8 already trips
-// the rate limiter with code -32007 (src/config/history.ts). The number that
-// matters is the endpoint's, so the budget has to be the endpoint's too: one,
-// shared, for the whole app.
+// eth_getLogs against an endpoint that rate-limits the whole account
+// (src/config/history.ts). The number that matters is the endpoint's, so the
+// budget has to be the endpoint's too: one, shared, for the whole app.
 //
 // The budget counts two things, because the endpoint limits two things. It
 // limits how many requests are in flight — that is the number src/config/
@@ -35,9 +34,6 @@ export interface InFlightBudget {
   // and hand the slot on. Rejections pass straight through, with the slot
   // released either way.
   run<T>(task: () => Promise<T>): Promise<T>;
-  // The budget as it was actually applied — at least one, whatever it was
-  // configured with.
-  readonly limit: number;
 }
 
 // Time, so the pacing can be asserted exactly instead of raced against a timer.
@@ -53,8 +49,9 @@ const REAL_CLOCK: BudgetClock = {
 };
 
 export interface BudgetOptions {
-  // Requests a second, across every scan. Omitted means no pacing at all,
-  // which is what a caller that only cares about concurrency wants.
+  // Requests a second, across every scan. The app always sets it; omitting it
+  // paces nothing, which is how the vectors hold the two properties apart —
+  // the in-flight count is asserted without the clock in play.
   requestsPerSecond?: number;
   clock?: BudgetClock;
 }
@@ -104,7 +101,6 @@ export function createInFlightBudget(
   };
 
   return {
-    limit: size,
     async run<T>(task: () => Promise<T>): Promise<T> {
       await acquire();
       try {

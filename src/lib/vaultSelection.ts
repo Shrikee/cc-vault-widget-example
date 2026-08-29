@@ -46,11 +46,14 @@ export function resolveVaultId(
 // where it was — a support link's own tracking parameters are not the widget's
 // to drop.
 //
-// Writing back what resolution just read is deliberately a fixed point: the
-// result resolves to the same id and rewriting it changes nothing, so the
-// history replace that normalises a stale URL runs once and cannot loop.
+// A URL that already names the product comes back untouched, byte for byte,
+// rather than re-serialised: re-encoding somebody else's parameters is a way of
+// dropping them slowly. That also makes writing back what resolution just read
+// a fixed point, so the history replace that normalises a stale URL runs once
+// and cannot loop.
 export function searchWithVaultId(search: string, id: string): string {
   const params = new URLSearchParams(search);
+  if (params.get(VAULT_PARAM) === id) return search;
   params.set(VAULT_PARAM, id);
   return `?${params.toString()}`;
 }

@@ -25,7 +25,8 @@ import {
 // cost behind that product's earnings sub-line.
 //
 // Scanned ONCE per wallet per product, from that product's Teller deployment
-// block, filtered to the wallet: 44 chunks today, growing ~22 a month. Two things keep that bearable.
+// block, filtered to the wallet: 44 chunks today, growing ~22 a month. Two
+// things keep that bearable.
 // A wallet whose share-unlock time is 0 has never deposited, so it needs no
 // scan at all; and the average deposit cost only ever changes when the wallet
 // itself deposits, so the only refresh is a one-chunk tail scan after its own

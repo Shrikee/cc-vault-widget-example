@@ -63,7 +63,10 @@ export const TOPIC_DEPOSIT_REFUNDED =
 //
 // This number alone does NOT keep the widget inside the limit; the rate below
 // is what does. Four in flight is 51-57 req/s at the latency measured on
-// 2026-08-28, which is over the limit on its own.
+// 2026-08-28, which is over the limit on its own. The two bind at different
+// latencies — concurrency when the endpoint answers slowly, the rate when it
+// answers fast — and whichever is tighter at the time governs, which is why
+// both are kept.
 export const DEFAULT_CHUNKS_IN_FLIGHT = 4;
 
 // How many eth_getLogs the widget may START per second, across every scan.

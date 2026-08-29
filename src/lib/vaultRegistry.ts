@@ -285,6 +285,29 @@ export function parseVaultRegistry(raw: unknown): VaultRoster {
   return { chain, vaults, baseAsset };
 }
 
+// What a product's vesting term MEANS, for the two surfaces that say it out
+// loud. Neither prices anything with it — pricing an early exit against a
+// holder's entitlement is stage 2 — and both live here rather than beside the
+// copy they feed, because they are facts about a registry entry and the
+// glossary's terms for them are the registry's own.
+
+// Whether this product can be redeemed before it has vested: its shares unlock
+// after the share lock, but the solver prices them against the vesting term,
+// and on the 30d product those are a day and thirty days apart. On the 24h
+// product they are the same day, so the gate cannot bind and there is nothing
+// to disclose.
+export function hasVestingGap(vault: Vault): boolean {
+  return vault.vestingSeconds > vault.ui.shareLockPeriod;
+}
+
+// The vesting term in whole days, as the copy says it. Both terms are exact
+// multiples of a day (86,400 and 2,592,000 seconds), so this rounds rather than
+// truncating: a term one second short of thirty days is thirty days to a
+// depositor, not twenty-nine.
+export function vestingDays(vault: Vault): number {
+  return Math.round(vault.vestingSeconds / 86_400);
+}
+
 // The roster's one lookup. An id the registry does not declare is a programming
 // error — a constant that drifted from the JSON, not a visitor's typo — so it
 // throws rather than falling back. Resolving an untrusted id (a URL parameter)

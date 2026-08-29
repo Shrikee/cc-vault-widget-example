@@ -1,4 +1,4 @@
-import type { Vault } from "../lib/vaultRegistry";
+import { hasVestingGap, vestingDays, type Vault } from "../lib/vaultRegistry";
 
 // The 30d product's vesting notice — a disclosure, not a decoration.
 //
@@ -28,16 +28,6 @@ import type { Vault } from "../lib/vaultRegistry";
 // address, so the copy names support without linking to it. Give it a link when
 // there is one to give.
 
-// The notice belongs to a product whose vesting term outlives its share lock —
-// that is exactly the window in which a depositor can redeem shares that have
-// not vested. On the 24h product the two are the same day and the gate cannot
-// bind, so there is nothing to disclose and nothing renders.
-export function hasVestingGap(vault: Vault): boolean {
-  return vault.vestingSeconds > vault.ui.shareLockPeriod;
-}
-
-const days = (seconds: number) => Math.round(seconds / 86_400);
-
 export function VestingNotice({
   vault,
   where,
@@ -48,10 +38,12 @@ export function VestingNotice({
   // leave.
   where: "deposit" | "withdraw";
 }) {
+  // Nothing to disclose on a product whose shares have vested by the time they
+  // unlock — see hasVestingGap.
   if (!hasVestingGap(vault)) return null;
 
-  const term = days(vault.vestingSeconds);
-  const lock = days(vault.ui.shareLockPeriod);
+  const term = vestingDays(vault);
+  const lock = Math.round(vault.ui.shareLockPeriod / 86_400);
 
   return (
     <div className="notice notice--warning">

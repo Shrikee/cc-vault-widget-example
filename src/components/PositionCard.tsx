@@ -8,14 +8,14 @@ import { formatDateTime, formatDuration } from "../lib/time";
 import { useNow } from "../hooks/useNow";
 import { Badge, Card, InlineError, Stat } from "./ui";
 
-// What a wallet holds in one product.
+// What a wallet holds in one product — the part of that product's reads this
+// card uses, declared narrowly so the card asks for no more than it shows.
 export interface ProductPosition {
-  // The product this position is in — its share symbol labels the holding, so
-  // two positions in one card can never be confused for each other.
+  // The product this position is in — its name and share symbol label the
+  // holding, so two positions in one card can never be confused.
   vault: Vault;
-  shares: number | null;
-  shareValue: number | null;
-  unlockAt: number | null;
+  position: { shares: number | null; unlockAt: number | null };
+  metrics: { shareValue: number | null };
   // Earnings is derived here rather than passed in: the average deposit cost
   // comes from that product's own scan, the shares and share price the card
   // already has.
@@ -37,10 +37,10 @@ export interface ProductPosition {
 // the special case.
 export function PositionCard({
   connected,
-  positions,
+  products,
 }: {
   connected: boolean;
-  positions: ProductPosition[];
+  products: ProductPosition[];
 }) {
   const now = useNow();
 
@@ -54,22 +54,23 @@ export function PositionCard({
 
   return (
     <Card title="Your positions">
-      {positions.map((position) => (
-        <ProductPositionBlock
-          key={position.vault.id}
-          position={position}
-          now={now}
-        />
+      {products.map((product) => (
+        <ProductPositionBlock key={product.vault.id} product={product} now={now} />
       ))}
     </Card>
   );
 }
 
 function ProductPositionBlock({
-  position: { vault, shares, shareValue, unlockAt, depositHistory },
+  product: {
+    vault,
+    position: { shares, unlockAt },
+    metrics: { shareValue },
+    depositHistory,
+  },
   now,
 }: {
-  position: ProductPosition;
+  product: ProductPosition;
   now: number;
 }) {
   // shareValue is NAV per share in USDT (≈ USD), so position value ≈ USD.
@@ -85,12 +86,12 @@ function ProductPositionBlock({
   const sign = earningsUsd === null ? 0 : signAfterRounding(earningsUsd, 2);
   const tone = sign > 0 ? "up" : sign < 0 ? "down" : "flat";
 
-  // The sub-line under Position value. A wallet that never deposited into this
-  // product says so (its scan is skipped outright); a wallet that has since
-  // exited its whole position gets no sub-line, because the figure would be
-  // $0.00 regardless of what it once earned. The error line is doubled by the
-  // InlineError below — the reason belongs beside the figure and in the card's
-  // error slot (§6.2).
+  // The sub-line under Position value. A wallet with no deposits in this
+  // product says so — the block's own heading names which product that is; a
+  // wallet that has since exited its whole position gets no sub-line, because
+  // the figure would be $0.00 regardless of what it once earned. The error
+  // line is doubled by the InlineError below — the reason belongs beside the
+  // figure and in the card's error slot (§6.2).
   const earningsHint: ReactNode =
     depositHistory.status === "none" ? (
       "Earnings — No deposits found for this wallet."

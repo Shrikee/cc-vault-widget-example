@@ -42,15 +42,14 @@ export function ApyHero({
     useState<TrailingWindow>(HEADLINE_WINDOW);
 
   const failed = history.status === "error";
-  // "…" only while something is still on its way. A failed metrics poll leaves
-  // the share price null for good — that is a "—", not a wait.
-  const loading = apys.loading;
 
   const figureFor = (windowDays: TrailingWindow) =>
     apys.windows?.find((w) => w.windowDays === windowDays) ?? null;
   const apy = figureFor(selectedWindow);
 
-  const value = loading ? "…" : fmtPct(apy?.apyPct ?? null);
+  // "…" only while something is still on its way; a figure that is not coming
+  // is a "—" (useWindowApys draws that line, for the chips as well as here).
+  const value = apys.loading ? "…" : fmtPct(apy?.apyPct ?? null);
   // A negative window is a real result: it turns red, and fmtPct never clamps it.
   const tone =
     apy?.apyPct == null

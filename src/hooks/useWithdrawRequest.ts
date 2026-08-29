@@ -59,9 +59,10 @@ const ATOMIC_QUEUE_ABI = [
 // request reflects promptly.
 //
 // `onFilled` fires when a poll observes THIS product's request transition from
-// open to zeroed. Only a solver fill zeroes the struct (a replace re-populates it, Stop
-// leaves it in place, expiry leaves it in place, and the solver can't fill past
-// the deadline), so a fillable→zero transition means the user got their USDT.
+// open to zeroed. Only a solver fill zeroes the struct (a replace re-populates
+// it, Stop leaves it in place, expiry leaves it in place, and the solver can't
+// fill past the deadline), so a fillable→zero transition means the user got
+// their USDT.
 export function useWithdrawRequest(
   vault: Vault,
   address?: `0x${string}`,

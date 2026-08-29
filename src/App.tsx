@@ -171,16 +171,7 @@ export function App() {
             />
             {/* Both products, always: money in the one not being looked at is
                 never invisible. */}
-            <PositionCard
-              connected={isConnected}
-              positions={products.map((p) => ({
-                vault: p.vault,
-                shares: p.position.shares,
-                shareValue: p.metrics.shareValue,
-                unlockAt: p.position.unlockAt,
-                depositHistory: p.depositHistory,
-              }))}
-            />
+            <PositionCard connected={isConnected} products={products} />
             <HowItWorks vault={vault} />
           </aside>
         </div>

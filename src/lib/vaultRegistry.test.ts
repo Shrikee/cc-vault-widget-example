@@ -11,7 +11,12 @@ import { describe, expect, it } from "vitest";
 
 import shipped from "../config/vaults.json";
 import { DEFAULT_VAULT_ID, ROSTER } from "../config/vaults";
-import { parseVaultRegistry, vaultById } from "./vaultRegistry";
+import {
+  hasVestingGap,
+  parseVaultRegistry,
+  vaultById,
+  vestingDays,
+} from "./vaultRegistry";
 
 // Clone the shipped registry and break exactly one field, addressed by path
 // ("vaults.1.addresses.teller"). Everything else stays valid, so the guard's
@@ -209,5 +214,27 @@ describe("vaultById", () => {
       'Vault registry: vaults declares no vault with id "coinchange-90d-polygon" ' +
         "(declared: coinchange-24h-polygon, coinchange-30d-polygon)"
     );
+  });
+});
+
+// The vesting term is carried for stage 2 and priced by nothing, but two
+// surfaces already say it out loud — the 30d panels' notice and the explainer's
+// extra step — and which products they say it on is decided here.
+describe("what a product's vesting term means", () => {
+  const vault24h = vaultById(ROSTER, "coinchange-24h-polygon");
+  const vault30d = vaultById(ROSTER, "coinchange-30d-polygon");
+
+  it("is a gap only where shares unlock before they vest", () => {
+    // 24h: the share lock and the vesting term are the same day, so a share
+    // that can be redeemed has already vested and nothing needs disclosing.
+    expect(hasVestingGap(vault24h)).toBe(false);
+    // 30d: one day locked, thirty days vesting — twenty-nine days in which a
+    // depositor can redeem shares the solver prices at what they paid.
+    expect(hasVestingGap(vault30d)).toBe(true);
+  });
+
+  it("reads in whole days, as the copy says it", () => {
+    expect(vestingDays(vault24h)).toBe(1);
+    expect(vestingDays(vault30d)).toBe(30);
   });
 });

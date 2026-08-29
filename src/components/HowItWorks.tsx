@@ -1,5 +1,4 @@
-import type { Vault } from "../lib/vaultRegistry";
-import { hasVestingGap } from "./VestingNotice";
+import { hasVestingGap, vestingDays, type Vault } from "../lib/vaultRegistry";
 import { Card } from "./ui";
 
 // Explains the deposit -> lock -> request -> solver-fill timeline so the
@@ -15,7 +14,7 @@ import { Card } from "./ui";
 export function HowItWorks({ vault }: { vault: Vault }) {
   const symbol = vault.ui.symbol;
   const vests = hasVestingGap(vault);
-  const vestingDays = Math.round(vault.vestingSeconds / 86_400);
+  const term = vestingDays(vault);
 
   const steps = [
     {
@@ -33,8 +32,8 @@ export function HowItWorks({ vault }: { vault: Vault }) {
     ...(vests
       ? [
           {
-            title: `${vestingDays}-day vesting`,
-            body: `This product's shares vest over ${vestingDays} days — separately from the 1-day lock. Redeem before they vest and the solver prices your shares at what you paid, so the request needs a wider redemption spread to be filled.`,
+            title: `${term}-day vesting`,
+            body: `This product's shares vest over ${term} days — separately from the 1-day lock. Redeem before they vest and the solver prices your shares at what you paid, so the request needs a wider redemption spread to be filled.`,
           },
         ]
       : []),

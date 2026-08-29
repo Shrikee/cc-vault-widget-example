@@ -70,6 +70,13 @@ describe("writing the selection back", () => {
     ).toBe("?vault=coinchange-30d-polygon&ref=support");
   });
 
+  it("leaves a URL that already names the product exactly as it was", () => {
+    // Down to the byte: re-serialising would re-encode a support link's own
+    // parameters, which are not this widget's to rewrite.
+    const support = "?ref=a%20b&vault=coinchange-30d-polygon&utm_source=email";
+    expect(searchWithVaultId(support, "coinchange-30d-polygon")).toBe(support);
+  });
+
   it("is what the next resolution reads back", () => {
     // The property that keeps the history replace from looping: writing the
     // resolved id produces a search string that resolves to the same id, so

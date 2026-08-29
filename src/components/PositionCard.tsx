@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { SHARE_SYMBOL } from "../config/vault";
+import type { Vault } from "../lib/vaultRegistry";
 import { formatAmount, formatUsd, fmtSignedUsd, signAfterRounding } from "../lib/format";
 import { computeEarnings } from "../lib/apy";
 import type { DepositHistory } from "../hooks/useDepositHistory";
@@ -9,12 +9,15 @@ import { useNow } from "../hooks/useNow";
 import { Badge, Card, InlineError, Stat } from "./ui";
 
 export function PositionCard({
+  vault,
   connected,
   shares,
   shareValue,
   unlockAt,
   depositHistory,
 }: {
+  // The product this position is in — its share symbol labels the holding.
+  vault: Vault;
   connected: boolean;
   shares: number | null;
   shareValue: number | null;
@@ -80,7 +83,7 @@ export function PositionCard({
     >
       <div className="stat-grid">
         <Stat
-          label={`Your ${SHARE_SYMBOL}`}
+          label={`Your ${vault.ui.symbol}`}
           value={shares === null ? "…" : formatAmount(shares, 4)}
         />
         <Stat

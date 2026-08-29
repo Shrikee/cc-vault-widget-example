@@ -1,6 +1,7 @@
 import { useReadContracts } from "wagmi";
 
-import { BASE_ASSET, CHAIN_ID } from "../config/vault";
+import { CHAIN_ID } from "../config/chain";
+import { BASE_ASSET } from "../config/tokens";
 import { decodeVaultMetrics, lensCalls } from "../lib/lens";
 import { errorMessage } from "../lib/logScan";
 import type { Vault } from "../lib/vaultRegistry";

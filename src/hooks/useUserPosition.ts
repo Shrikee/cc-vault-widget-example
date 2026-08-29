@@ -1,7 +1,7 @@
 import { useReadContracts } from "wagmi";
 import type { Address } from "viem";
 
-import { CHAIN_ID } from "../config/vault";
+import { CHAIN_ID } from "../config/chain";
 import { decodeUserPosition, lensCalls } from "../lib/lens";
 import { errorMessage } from "../lib/logScan";
 import type { Vault } from "../lib/vaultRegistry";

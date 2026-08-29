@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useToast } from "../components/Toaster";
-import { explorerTx } from "../config/vault";
+import { explorerTx } from "../config/chain";
 import type { DepositStatus, WithdrawStatus } from "../lib/boringVault";
 
 type Status = DepositStatus | WithdrawStatus;

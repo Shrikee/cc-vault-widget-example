@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
 import { erc20Abi } from "viem";
 import { useReadContract } from "wagmi";
-import { CONTRACTS, VAULT_DECIMALS, WITHDRAW_TOKEN } from "../config/vault";
+import { WITHDRAW_TOKEN } from "../config/tokens";
 import { nowSeconds } from "../lib/time";
+import type { Vault } from "../lib/vaultRegistry";
 
 // The user's open redemption request, decoded to human units.
 export interface WithdrawRequest {
@@ -62,30 +63,25 @@ const ATOMIC_QUEUE_ABI = [
 // leaves it in place, expiry leaves it in place, and the solver can't fill past
 // the deadline), so a fillable→zero transition means the user got their USDT.
 export function useWithdrawRequest(
+  vault: Vault,
   address?: `0x${string}`,
   onFilled?: () => void
 ): WithdrawRequestState {
   const reqQuery = useReadContract({
-    address: CONTRACTS.withdrawQueue as `0x${string}`,
+    address: vault.addresses.queue,
     abi: ATOMIC_QUEUE_ABI,
     functionName: "getUserAtomicRequest",
     args: address
-      ? [
-          address,
-          CONTRACTS.vault as `0x${string}`,
-          WITHDRAW_TOKEN.address as `0x${string}`,
-        ]
+      ? [address, vault.addresses.vault, WITHDRAW_TOKEN.address as `0x${string}`]
       : undefined,
     query: { enabled: Boolean(address), refetchInterval: 30_000 },
   });
 
   const allowanceQuery = useReadContract({
-    address: CONTRACTS.vault as `0x${string}`,
+    address: vault.addresses.vault,
     abi: erc20Abi,
     functionName: "allowance",
-    args: address
-      ? [address, CONTRACTS.withdrawQueue as `0x${string}`]
-      : undefined,
+    args: address ? [address, vault.addresses.queue] : undefined,
     query: { enabled: Boolean(address), refetchInterval: 30_000 },
   });
 
@@ -134,7 +130,7 @@ export function useWithdrawRequest(
   let request: WithdrawRequest | null = null;
   if (raw && raw.offerAmount > 0n) {
     request = {
-      shares: Number(raw.offerAmount) / 10 ** VAULT_DECIMALS,
+      shares: Number(raw.offerAmount) / 10 ** vault.ui.decimals,
       minPrice: Number(raw.atomicPrice) / 10 ** WITHDRAW_TOKEN.decimals,
       deadline: Number(raw.deadline),
       inSolve: raw.inSolve,

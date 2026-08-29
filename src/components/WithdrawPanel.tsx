@@ -7,16 +7,14 @@ import { useStatusToasts } from "../hooks/useStatusToasts";
 import { useToast } from "./Toaster";
 import { useNow } from "../hooks/useNow";
 import type { WithdrawRequest } from "../hooks/useWithdrawRequest";
+import { explorerAddress, explorerTx } from "../config/chain";
 import {
-  CONTRACTS,
-  SHARE_SYMBOL,
-  WITHDRAW_TOKEN,
   WITHDRAW_DISCOUNT_PCT_DEFAULT,
   WITHDRAW_DISCOUNT_PCT_MAX,
   WITHDRAW_VALID_DAYS_DEFAULT,
-  explorerAddress,
-  explorerTx,
-} from "../config/vault";
+} from "../config/redemption";
+import { WITHDRAW_TOKEN } from "../config/tokens";
+import type { Vault } from "../lib/vaultRegistry";
 import { formatAmount, parseAmount, shortAddress } from "../lib/format";
 import { AmountInput } from "./AmountInput";
 import { Modal } from "./Modal";
@@ -28,6 +26,7 @@ const wantSymbol = WITHDRAW_TOKEN.displayName ?? "USDT";
 const ERC20_APPROVE_ABI = ["function approve(address spender, uint256 amount) returns (bool)"];
 
 export function WithdrawPanel({
+  vault,
   signer,
   address,
   shares,
@@ -39,6 +38,9 @@ export function WithdrawPanel({
   refetchRequest,
   onSuccess,
 }: {
+  // The product being redeemed from: its shares are offered, and the request
+  // is posted to its own AtomicQueue.
+  vault: Vault;
   signer: JsonRpcSigner | undefined;
   address?: `0x${string}`;
   shares: number | null;
@@ -54,6 +56,8 @@ export function WithdrawPanel({
     useBoringVaultV1();
   const { show, dismiss } = useToast();
   const now = useNow();
+
+  const shareSymbol = vault.ui.symbol;
 
   const [amount, setAmount] = useState("");
   const [advanced, setAdvanced] = useState(false);
@@ -140,8 +144,8 @@ export function WithdrawPanel({
     setStopping(true);
     const tid = show("Revoking approval…", "loading");
     try {
-      const share = new Contract(CONTRACTS.vault, ERC20_APPROVE_ABI, signer);
-      const tx = await share.approve(CONTRACTS.withdrawQueue, 0n);
+      const share = new Contract(vault.addresses.vault, ERC20_APPROVE_ABI, signer);
+      const tx = await share.approve(vault.addresses.queue, 0n);
       const receipt = await tx.wait();
       dismiss(tid);
       show("Approval revoked — your request can no longer be filled", "success", {
@@ -172,7 +176,7 @@ export function WithdrawPanel({
         value={amount}
         onChange={setAmount}
         max={shares}
-        unit={SHARE_SYMBOL}
+        unit={shareSymbol}
         maxLabel="Your shares"
         disabled={busy || !address || locked}
       />
@@ -276,7 +280,12 @@ export function WithdrawPanel({
         {!request ? (
           <p className="muted small">No open redemption request.</p>
         ) : (
-          <RequestRow request={request} busy={busy} onStop={runStop} />
+          <RequestRow
+            vault={vault}
+            request={request}
+            busy={busy}
+            onStop={runStop}
+          />
         )}
       </div>
 
@@ -297,7 +306,7 @@ export function WithdrawPanel({
           <div className="row">
             <span>Redeem</span>
             <span>
-              {formatAmount(parsed, 4)} {SHARE_SYMBOL}
+              {formatAmount(parsed, 4)} {shareSymbol}
             </span>
           </div>
           <div className="row">
@@ -317,16 +326,16 @@ export function WithdrawPanel({
           <div className="row">
             <span>Approve shares to</span>
             <a
-              href={explorerAddress(CONTRACTS.withdrawQueue)}
+              href={explorerAddress(vault.addresses.queue)}
               target="_blank"
               rel="noreferrer"
             >
-              {shortAddress(CONTRACTS.withdrawQueue)}
+              {shortAddress(vault.addresses.queue)}
             </a>
           </div>
         </div>
         <p className="muted small">
-          You may be asked to sign twice: first to approve {SHARE_SYMBOL}, then to
+          You may be asked to sign twice: first to approve {shareSymbol}, then to
           submit the request. An off-chain solver fills it and sends you{" "}
           {wantSymbol} — there is no separate claim step.
         </p>

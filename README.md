@@ -124,9 +124,13 @@ native USDC and bridged USDC.e on Polygon. Redemptions pay USDT.
 ## Architecture
 
 ```
-WagmiProvider → QueryClientProvider → ConnectKitProvider
-  → BoringVaultV1Provider → Toaster → App
+WagmiProvider → QueryClientProvider → ConnectKitProvider → Toaster → App
+  └─ App mounts BoringVaultV1Provider, keyed by the selected vault id,
+     around the deposit and withdraw panels — the write paths only.
 ```
+
+Every read takes its vault as an argument and goes straight to the chain, so
+nothing outside those two panels depends on the library's context.
 
 - `src/config/vaults.json` — the vault registry: both Coinchange products, in
   the shape a vault entry takes in the solver service's roster so the two files
@@ -136,14 +140,20 @@ WagmiProvider → QueryClientProvider → ConnectKitProvider
   naming the field.
 - `src/config/vaults.ts` — where the JSON meets the guard; also the provenance
   of the four values no chain read can confirm.
-- `src/config/vault.ts` — the widget's behavioural params, plus a singular view
-  of the default product for the hooks that still take their vault at module
-  scope.
+- `src/config/chain.ts` — the chain both products are on: id, label, explorer
+  links. Declared once in the registry, not per vault.
+- `src/config/tokens.ts` — the base asset (USDT) the widget deposits, redeems
+  and prices in; both products name the same one.
+- `src/config/redemption.ts` — the redemption spread and validity defaults, the
+  same on both products.
 - `src/config/wagmi.ts` — wagmi config + ethers read provider.
 - `src/config/history.ts` — history-scan parameters that belong to the protocol
   rather than to a product: event topics, trailing windows, chunk span and
   chunk concurrency.
 - `src/lib/boringVault.ts` — the single import boundary to the library (see notes).
+- `src/lib/lens.ts` — the four vault reads (TVL, share price, shares, share-lock
+  expiry) as calls to the Lens both products share, plus the decoders that turn
+  what it returns into the figures on screen.
 - `src/lib/useEthersSigner.ts` — local viem→ethers signer adapter (see notes).
 - `src/lib/apy.ts` — the pure yield derivations: realised trailing APY per
   window, earnings, projected earnings (no network, no React).
@@ -159,7 +169,8 @@ WagmiProvider → QueryClientProvider → ConnectKitProvider
   `useNow`.
 - `src/components/*` — custom UI.
 - `src/lib/*.test.ts` — the vectors, driving the real modules: the APY,
-  earnings and projection derivations, and the scan bookkeeping.
+  earnings and projection derivations, the scan bookkeeping, the registry parse
+  and the Lens reads.
 
 ---
 

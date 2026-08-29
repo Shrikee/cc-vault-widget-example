@@ -1,10 +1,6 @@
-import {
-  DEPLOY_TIMESTAMP,
-  HEADLINE_WINDOW,
-  INITIAL_SHARE_PRICE,
-  WINDOWS,
-} from "../config/history";
-import { computeWindowApy, type LaunchAnchors, type WindowApy } from "../lib/apy";
+import { HEADLINE_WINDOW, INITIAL_SHARE_PRICE, WINDOWS } from "../config/history";
+import { computeWindowApy, type WindowApy } from "../lib/apy";
+import type { Vault } from "../lib/vaultRegistry";
 import { useNow } from "./useNow";
 import type { ShareHistory } from "./useShareHistory";
 import type { VaultMetrics } from "./useVaultMetrics";
@@ -28,15 +24,8 @@ export interface WindowApys {
   headline: WindowApy | null;
 }
 
-// The launch the windows are measured against. Only one product renders today,
-// so these are its anchors; when the data layer learns which vault it is
-// reading, this hook takes the vault and reads them off it instead.
-const LAUNCH: LaunchAnchors = {
-  deployTimestamp: DEPLOY_TIMESTAMP,
-  initialSharePrice: INITIAL_SHARE_PRICE,
-};
-
 export function useWindowApys(
+  vault: Vault,
   history: ShareHistory,
   metrics: VaultMetrics
 ): WindowApys {
@@ -45,11 +34,20 @@ export function useWindowApys(
   const now = useNow(30_000);
   const sharePrice = metrics.shareValue;
 
+  // Where this product's history starts. A window reaching back before it is
+  // measured since launch instead, and the two products launched five months
+  // apart — so a 30-day window is an ordinary trailing window on one and a
+  // since-launch measurement on the other, at the same moment.
+  const launch = {
+    deployTimestamp: vault.ui.deployTimestamp,
+    initialSharePrice: INITIAL_SHARE_PRICE,
+  };
+
   // Arithmetic over ≤ 60 events — cheap enough to redo on each tick.
   const windows =
     history.status === "ready" && sharePrice !== null
       ? WINDOWS.map((windowDays) =>
-          computeWindowApy(LAUNCH, history.events, sharePrice, now, windowDays)
+          computeWindowApy(launch, history.events, sharePrice, now, windowDays)
         )
       : null;
 

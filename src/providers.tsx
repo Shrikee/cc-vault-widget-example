@@ -7,12 +7,8 @@ import { BoringVaultV1Provider } from "./lib/boringVault";
 import { ethersProvider, wagmiConfig } from "./config/wagmi";
 import { Toaster } from "./components/Toaster";
 import type { Vault } from "./lib/vaultRegistry";
-import {
-  BASE_ASSET,
-  CHAIN,
-  DEPOSIT_TOKENS,
-  WITHDRAW_TOKENS,
-} from "./config/vault";
+import { CHAIN } from "./config/chain";
+import { BASE_ASSET, DEPOSIT_TOKENS, WITHDRAW_TOKENS } from "./config/tokens";
 
 const queryClient = new QueryClient();
 

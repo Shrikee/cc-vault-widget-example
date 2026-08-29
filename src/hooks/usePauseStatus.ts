@@ -1,5 +1,6 @@
 import { useReadContracts } from "wagmi";
-import { CONTRACTS } from "../config/vault";
+
+import type { Vault } from "../lib/vaultRegistry";
 
 // The system has three independent pause flags (integration guide §10):
 //   • teller.isPaused()          — blocks deposits
@@ -57,21 +58,24 @@ export interface PauseStatus {
   lastSharePriceUpdateAt: number | null;
 }
 
-export function usePauseStatus(): PauseStatus {
+// The three flags belong to one product's contracts, so the vault being looked
+// at is the argument: a pause on the other product must not block a page the
+// visitor can actually use.
+export function usePauseStatus(vault: Vault): PauseStatus {
   const { data } = useReadContracts({
     contracts: [
       {
-        address: CONTRACTS.teller as `0x${string}`,
+        address: vault.addresses.teller,
         abi: IS_PAUSED_ABI,
         functionName: "isPaused",
       },
       {
-        address: CONTRACTS.accountant as `0x${string}`,
+        address: vault.addresses.accountant,
         abi: ACCOUNTANT_STATE_ABI,
         functionName: "accountantState",
       },
       {
-        address: CONTRACTS.withdrawQueue as `0x${string}`,
+        address: vault.addresses.queue,
         abi: IS_PAUSED_ABI,
         functionName: "isPaused",
       },

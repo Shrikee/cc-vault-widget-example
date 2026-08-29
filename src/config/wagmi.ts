@@ -3,7 +3,7 @@ import { createConfig, http } from "wagmi";
 import { polygon } from "wagmi/chains";
 import { getDefaultConfig } from "connectkit";
 
-import { CHAIN_ID } from "./vault";
+import { CHAIN_ID } from "./chain";
 
 const RPC_URL =
   import.meta.env.VITE_RPC_URL || "https://polygon-rpc.com";

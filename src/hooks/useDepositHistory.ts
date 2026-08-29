@@ -2,15 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Hex } from "viem";
 import { usePublicClient } from "wagmi";
 
-import { CHAIN_ID, CONTRACTS, DEPOSIT_TOKENS } from "../config/vault";
+import { CHAIN_ID } from "../config/chain";
+import { DEPOSIT_TOKENS } from "../config/tokens";
 import {
-  DEPLOY_BLOCKS,
   TOPIC_DEPOSIT,
   TOPIC_DEPOSIT_REFUNDED,
   historyChunksInFlight,
 } from "../config/history";
 import { decodeDepositLog, reconstructDeposits, type DepositLog } from "../lib/apy";
 import { errorMessage, scanLogs } from "../lib/logScan";
+import type { Vault } from "../lib/vaultRegistry";
 import {
   NO_SCANS,
   abandonScan,
@@ -73,13 +74,14 @@ function pad32(address: string): Hex {
 // index in each.
 function scanWallet(
   client: NonNullable<ReturnType<typeof usePublicClient>>,
+  vault: Vault,
   wallet: string,
   fromBlock: bigint,
   toBlock: bigint
 ) {
   return scanLogs({
     client,
-    address: CONTRACTS.teller,
+    address: vault.addresses.teller,
     topics: [[TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED], null, pad32(wallet)],
     fromBlock,
     toBlock,
@@ -102,6 +104,7 @@ function summarise(logs: DepositLog[], lastScannedBlock: bigint): DepositHistory
 }
 
 export function useDepositHistory(
+  vault: Vault,
   address?: string,
   unlockAt?: number | null,
   // Why the share-unlock time is unknown, when it is. That time is the scan's
@@ -135,10 +138,13 @@ export function useDepositHistory(
       if (!client || !address) return;
       (async () => {
         const latest = await client.getBlockNumber();
-        const from = scan.from ?? BigInt(DEPLOY_BLOCKS.teller);
+        const from = scan.from ?? BigInt(vault.ui.deployBlocks.teller);
         // A tail with nothing new to read: the chain has not moved past the
         // cursor since the last scan.
-        const raw = from > latest ? [] : await scanWallet(client, address, from, latest);
+        const raw =
+          from > latest
+            ? []
+            : await scanWallet(client, vault, address, from, latest);
         if (!isCurrent(runs.current, scan)) return; // overtaken — drop it
 
         const found = raw.map(decodeDepositLog);
@@ -168,7 +174,7 @@ export function useDepositHistory(
         if (step.run) perform(step.run);
       });
     },
-    [client, address]
+    [client, vault, address]
   );
 
   useEffect(() => {

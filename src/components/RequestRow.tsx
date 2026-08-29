@@ -1,4 +1,5 @@
-import { SHARE_SYMBOL, WITHDRAW_TOKEN } from "../config/vault";
+import { WITHDRAW_TOKEN } from "../config/tokens";
+import type { Vault } from "../lib/vaultRegistry";
 import { formatAmount } from "../lib/format";
 import { formatDateTime, formatDuration, requestPhase } from "../lib/time";
 import { useNow } from "../hooks/useNow";
@@ -11,10 +12,13 @@ import { Badge, Button } from "./ui";
 // pending fill is to revoke the share approval; the request itself clears at its
 // deadline.
 export function RequestRow({
+  vault,
   request,
   busy,
   onStop,
 }: {
+  // The product the request is against — its share symbol is what is offered.
+  vault: Vault;
   request: WithdrawRequest;
   busy: boolean;
   onStop: () => void;
@@ -58,7 +62,7 @@ export function RequestRow({
       <div className="request__main">
         <div className="request__line">
           <span className="request__shares">
-            {formatAmount(request.shares, 4)} {SHARE_SYMBOL}
+            {formatAmount(request.shares, 4)} {vault.ui.symbol}
           </span>
           <Badge tone={tone}>{label}</Badge>
         </div>

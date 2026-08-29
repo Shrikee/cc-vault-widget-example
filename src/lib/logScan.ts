@@ -67,7 +67,8 @@ export function dataWord(data: Hex | string, index: number): bigint {
   return BigInt(`0x${data.slice(2).slice(index * 64, (index + 1) * 64)}`);
 }
 
-// Why a scan failed, in the words most likely to help. The provider's own
+// Why a chain read failed, in the words most likely to help — a scan's chunk
+// here, and a Lens read in the metrics and position hooks. The provider's own
 // message (viem keeps it in `details`) beats viem's generic classification —
 // "Archive requests require a personal token" tells the operator what to fix,
 // "Invalid parameters" does not.

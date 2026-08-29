@@ -13,16 +13,6 @@
 // (src/config/vaults.json), which is also where the verification date and the
 // provenance notes are.
 // =============================================================================
-import { DEFAULT_VAULT } from "./vaults";
-
-// The default product's deploy blocks and launch instant, re-exported from the
-// registry for the hooks that still take their vault at module scope. They go
-// when those hooks take a vault argument.
-export const DEPLOY_BLOCKS = DEFAULT_VAULT.ui.deployBlocks;
-
-// The accountant's deploy block timestamp. Windows reaching further back are
-// measured since launch instead.
-export const DEPLOY_TIMESTAMP = DEFAULT_VAULT.ui.deployTimestamp;
 
 // The accountant's constructor sets exchangeRate = 1.000000 base/share on both
 // products, so the share price at launch needs no lookup. Protocol-level, not

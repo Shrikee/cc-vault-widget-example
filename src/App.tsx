@@ -9,7 +9,7 @@ import { useDepositHistory } from "./hooks/useDepositHistory";
 import { useWithdrawRequest } from "./hooks/useWithdrawRequest";
 import { usePauseStatus } from "./hooks/usePauseStatus";
 import { useWindowApys } from "./hooks/useWindowApys";
-import { CHAIN_ID, CHAIN_LABEL, SHARE_SYMBOL, VAULT_NAME } from "./config/vault";
+import { CHAIN_ID, CHAIN_LABEL } from "./config/chain";
 import { DEFAULT_VAULT_ID, ROSTER } from "./config/vaults";
 import { vaultById } from "./lib/vaultRegistry";
 import { VaultWriteProvider } from "./providers";
@@ -41,22 +41,23 @@ export function App() {
   const [tab, setTab] = useState<Tab>("deposit");
 
   const metrics = useVaultMetrics(vault);
-  const history = useShareHistory();
+  const history = useShareHistory(vault);
   const position = useUserPosition(vault, address);
   // The wallet's share-unlock time is the deposit scan's precondition; when the
   // position read failed there is none, and the sub-line says so rather than
   // waiting forever.
   const depositHistory = useDepositHistory(
+    vault,
     address,
     position.unlockAt,
     position.error
   );
-  const pause = usePauseStatus();
+  const pause = usePauseStatus(vault);
   const { show } = useToast();
   // The realised trailing APY for every window, derived once here: the hero
   // shows the selected one, the deposit panel's projection always quotes the
   // headline (7 d) figure whatever the toggle shows.
-  const apys = useWindowApys(history, metrics);
+  const apys = useWindowApys(vault, history, metrics);
 
   // Celebrate a solver fill (guide §9 FILLED): the request vanishing from the
   // queue means the USDT already landed in the user's wallet.
@@ -65,7 +66,7 @@ export function App() {
     metrics.refetch();
     position.refetch();
   }, [show, metrics, position]);
-  const withdrawRequest = useWithdrawRequest(address, onFilled);
+  const withdrawRequest = useWithdrawRequest(vault, address, onFilled);
 
   // After any successful write, refresh everything the user can see.
   const refreshAll = useCallback(() => {
@@ -79,16 +80,16 @@ export function App() {
 
   return (
     <div className="app">
-      <Header />
+      <Header vault={vault} />
 
       <main className="container">
         <NetworkBanner />
         <PauseBanner status={pause} />
 
         <div className="hero">
-          <h1>Coinchange {VAULT_NAME}</h1>
+          <h1>Coinchange {vault.ui.name}</h1>
           <p>
-            Deposit USDT to earn yield in {VAULT_NAME} ({SHARE_SYMBOL}).
+            Deposit USDT to earn yield in {vault.ui.name} ({vault.ui.symbol}).
             To redeem, submit a request — an off-chain solver fills it and sends
             you USDT, no separate claim step.
           </p>
@@ -121,6 +122,7 @@ export function App() {
               <VaultWriteProvider vault={vault}>
                 {tab === "deposit" ? (
                   <DepositPanel
+                    vault={vault}
                     signer={signer}
                     address={address}
                     sharesHeld={position.shares}
@@ -132,6 +134,7 @@ export function App() {
                   />
                 ) : (
                   <WithdrawPanel
+                    vault={vault}
                     signer={signer}
                     address={address}
                     shares={position.shares}
@@ -150,19 +153,21 @@ export function App() {
 
           <aside className="layout__side">
             <VaultStats
+              vault={vault}
               metrics={metrics}
               history={history}
               windows={apys.windows}
               lastSharePriceUpdateAt={pause.lastSharePriceUpdateAt}
             />
             <PositionCard
+              vault={vault}
               connected={isConnected}
               shares={position.shares}
               shareValue={metrics.shareValue}
               unlockAt={position.unlockAt}
               depositHistory={depositHistory}
             />
-            <HowItWorks />
+            <HowItWorks vault={vault} />
           </aside>
         </div>
 
@@ -178,7 +183,7 @@ export function App() {
             </a>
           </span>
           <span>
-            {CHAIN_LABEL} · {SHARE_SYMBOL}
+            {CHAIN_LABEL} · {vault.ui.symbol}
           </span>
         </footer>
       </main>

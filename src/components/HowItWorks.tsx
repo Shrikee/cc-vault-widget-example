@@ -1,17 +1,19 @@
-import { SHARE_SYMBOL } from "../config/vault";
+import type { Vault } from "../lib/vaultRegistry";
 import { Card } from "./ui";
 
 // Explains the deposit -> lock -> request -> solver-fill timeline so the
-// redemption model (no on-chain claim step) is never a surprise.
-export function HowItWorks() {
+// redemption model (no on-chain claim step) is never a surprise. Told in terms
+// of the product being looked at, down to its share symbol.
+export function HowItWorks({ vault }: { vault: Vault }) {
+  const symbol = vault.ui.symbol;
   const steps = [
     {
       title: "Deposit USDT",
-      body: `Approve and deposit a stablecoin. You receive ${SHARE_SYMBOL} vault shares.`,
+      body: `Approve and deposit a stablecoin. You receive ${symbol} vault shares.`,
     },
     {
       title: "1-day share lock",
-      body: `${SHARE_SYMBOL} shares can't be transferred or redeemed for 1 day after a deposit. Each new deposit restarts the lock for your entire balance.`,
+      body: `${symbol} shares can't be transferred or redeemed for 1 day after a deposit. Each new deposit restarts the lock for your entire balance.`,
     },
     {
       title: "Earn yield",

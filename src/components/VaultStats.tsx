@@ -1,9 +1,6 @@
-import {
-  explorerAddress,
-  CONTRACTS,
-  BASE_ASSET,
-  SHARE_SYMBOL,
-} from "../config/vault";
+import { explorerAddress } from "../config/chain";
+import { BASE_ASSET } from "../config/tokens";
+import type { Vault } from "../lib/vaultRegistry";
 import { formatAmount, formatUsd, shortAddress } from "../lib/format";
 import { formatDateTime } from "../lib/time";
 import type { VaultMetrics } from "../hooks/useVaultMetrics";
@@ -13,11 +10,15 @@ import { ApyHero } from "./ApyHero";
 import { Badge, Card, InlineError, Stat } from "./ui";
 
 export function VaultStats({
+  vault,
   metrics,
   history,
   windows,
   lastSharePriceUpdateAt,
 }: {
+  // The product these figures are for; it names the share token and the
+  // contract the card links to.
+  vault: Vault;
   metrics: VaultMetrics;
   history: ShareHistory;
   // The realised trailing APY for each offered window, derived in App.
@@ -26,6 +27,7 @@ export function VaultStats({
 }) {
   const { tvl, shareValue, error } = metrics;
   const baseSymbol = BASE_ASSET.displayName ?? "USDT";
+  const symbol = vault.ui.symbol;
 
   return (
     <Card
@@ -54,20 +56,20 @@ export function VaultStats({
           value={
             shareValue === null ? "…" : `${formatAmount(shareValue, 4)} ${baseSymbol}`
           }
-          hint={`NAV of 1 ${SHARE_SYMBOL}`}
+          hint={`NAV of 1 ${symbol}`}
         />
       </div>
 
       <dl className="kv">
         <div>
-          <dt>Vault ({SHARE_SYMBOL})</dt>
+          <dt>Vault ({symbol})</dt>
           <dd>
             <a
-              href={explorerAddress(CONTRACTS.vault)}
+              href={explorerAddress(vault.addresses.vault)}
               target="_blank"
               rel="noreferrer"
             >
-              {shortAddress(CONTRACTS.vault)}
+              {shortAddress(vault.addresses.vault)}
             </a>
           </dd>
         </div>

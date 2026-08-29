@@ -1,5 +1,5 @@
 import { useAccount, useSwitchChain } from "wagmi";
-import { CHAIN_ID, CHAIN_LABEL } from "../config/vault";
+import { CHAIN_ID, CHAIN_LABEL } from "../config/chain";
 import { Button } from "./ui";
 
 // Vault writes only work on the vault's chain. Prompt a switch if the connected

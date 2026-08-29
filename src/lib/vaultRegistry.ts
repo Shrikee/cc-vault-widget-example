@@ -75,9 +75,10 @@ export interface VaultUi {
   //
   // `vault` is a deliberate deviation: the spec's registry sketch lists only
   // the accountant and the teller, but the verified figures this registry was
-  // built from give all three, and today's DEPLOY_BLOCKS carries all three. A
-  // prefactor should not quietly drop a verified value, so it is required here
-  // too — and nothing reads it. Drop it when something decides it is noise.
+  // built from give all three, and so did the DEPLOY_BLOCKS constant it
+  // replaced. A prefactor should not quietly drop a verified value, so it is
+  // required here too — and nothing reads it. Drop it when something decides it
+  // is noise.
   deployBlocks: { vault: number; accountant: number; teller: number };
   // The accountant's deploy BLOCK timestamp, unix seconds — the anchor for a
   // trailing window measured since launch. Read from the chain rather than from

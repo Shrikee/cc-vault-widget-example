@@ -5,13 +5,9 @@ import { ConnectKitButton } from "connectkit";
 import { useBoringVaultV1, type Token } from "../lib/boringVault";
 import { useTokenBalance } from "../hooks/useTokenBalance";
 import { useStatusToasts } from "../hooks/useStatusToasts";
-import {
-  CONTRACTS,
-  DEPOSIT_TOKENS,
-  SHARE_SYMBOL,
-  SHARE_LOCK_PERIOD,
-  explorerAddress,
-} from "../config/vault";
+import { explorerAddress } from "../config/chain";
+import { DEPOSIT_TOKENS } from "../config/tokens";
+import type { Vault } from "../lib/vaultRegistry";
 import {
   fmtPct,
   formatAmount,
@@ -26,6 +22,7 @@ import { Modal } from "./Modal";
 import { Button, InlineError } from "./ui";
 
 export function DepositPanel({
+  vault,
   signer,
   address,
   sharesHeld,
@@ -35,6 +32,9 @@ export function DepositPanel({
   projection,
   onSuccess,
 }: {
+  // The product being deposited into: its contracts take the deposit, its
+  // share token is what comes back, and its teller sets the lock.
+  vault: Vault;
   signer: JsonRpcSigner | undefined;
   address?: `0x${string}`;
   sharesHeld: number | null;
@@ -50,6 +50,7 @@ export function DepositPanel({
 }) {
   const { isBoringV1ContextReady, deposit, depositStatus } = useBoringVaultV1();
 
+  const shareSymbol = vault.ui.symbol;
   const [token, setToken] = useState<Token>(DEPOSIT_TOKENS[0]);
   const { balance } = useTokenBalance(token, address);
 
@@ -147,7 +148,7 @@ export function DepositPanel({
           <span>
             {estShares === null
               ? "—"
-              : `${formatAmount(estShares, 4)} ${SHARE_SYMBOL}`}
+              : `${formatAmount(estShares, 4)} ${shareSymbol}`}
           </span>
         </div>
         <div className="row">
@@ -159,13 +160,13 @@ export function DepositPanel({
       </div>
 
       <div className="notice notice--info">
-        After depositing, your {SHARE_SYMBOL} shares are locked for{" "}
-        <strong>{formatDuration(SHARE_LOCK_PERIOD)}</strong> before they can be
-        redeemed.
+        After depositing, your {shareSymbol} shares are locked for{" "}
+        <strong>{formatDuration(vault.ui.shareLockPeriod)}</strong> before they
+        can be redeemed.
         {sharesHeld !== null && sharesHeld > 0 && (
           <>
             {" "}
-            A new deposit re-locks your <strong>entire</strong> {SHARE_SYMBOL}{" "}
+            A new deposit re-locks your <strong>entire</strong> {shareSymbol}{" "}
             balance — including the shares you already hold.
           </>
         )}
@@ -212,26 +213,34 @@ export function DepositPanel({
             <span>
               {estShares === null
                 ? "—"
-                : `${formatAmount(estShares, 4)} ${SHARE_SYMBOL}`}
+                : `${formatAmount(estShares, 4)} ${shareSymbol}`}
             </span>
           </div>
           <div className="row">
             <span>Approve + deposit to</span>
-            <a href={explorerAddress(CONTRACTS.vault)} target="_blank" rel="noreferrer">
-              {shortAddress(CONTRACTS.vault)}
+            <a
+              href={explorerAddress(vault.addresses.vault)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {shortAddress(vault.addresses.vault)}
             </a>
           </div>
           <div className="row">
             <span>Via teller</span>
-            <a href={explorerAddress(CONTRACTS.teller)} target="_blank" rel="noreferrer">
-              {shortAddress(CONTRACTS.teller)}
+            <a
+              href={explorerAddress(vault.addresses.teller)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {shortAddress(vault.addresses.teller)}
             </a>
           </div>
         </div>
         <p className="muted small">
           You may be asked to sign twice: first to approve {symbol}, then to
-          deposit. Your entire {SHARE_SYMBOL} balance locks for{" "}
-          {formatDuration(SHARE_LOCK_PERIOD)} after each deposit.
+          deposit. Your entire {shareSymbol} balance locks for{" "}
+          {formatDuration(vault.ui.shareLockPeriod)} after each deposit.
         </p>
       </Modal>
     </div>

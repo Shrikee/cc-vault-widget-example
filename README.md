@@ -56,7 +56,7 @@ under our control.
 
 ```bash
 npm install
-cp .env.example .env     # then set VITE_RPC_URL — required (see Environment)
+cp .env.example .env     # then set RPC_URL — required (see Environment)
 npm run dev              # http://localhost:5173
 ```
 
@@ -81,13 +81,13 @@ the Node this project is developed and tested on.
 
 | Var | Required | Purpose |
 |---|---|---|
-| `VITE_RPC_URL` | **yes** | Polygon PoS RPC for all reads, and it **must be archive-capable** (QuickNode / Alchemy / Infura — an endpoint that serves ranged `eth_getLogs` and historical `eth_call`): each product's yield figures scan its accountant's share-price logs, and a wallet's deposit history comes from that product's Teller logs. It must also tolerate the widget's request **rate** — see the note below. The app does **not** verify either. |
+| `RPC_URL` | **yes** | Polygon PoS RPC for all reads, and it **must be archive-capable** (QuickNode / Alchemy / Infura — an endpoint that serves ranged `eth_getLogs` and historical `eth_call`): each product's yield figures scan its accountant's share-price logs, and a wallet's deposit history comes from that product's Teller logs. It must also tolerate the widget's request **rate** — see the note below. The app does **not** verify either. |
 | `VITE_HISTORY_CHUNKS_IN_FLIGHT` | no | Log-chunk requests in flight at once, as **one budget shared by every scan** rather than a limit per scan. Default `4`. |
 | `VITE_WALLETCONNECT_PROJECT_ID` | no | Enables WalletConnect/mobile QR. Injected wallets (MetaMask/Rabby) work without it. |
 
 Reads (TVL, share price, positions) need **no wallet** — both products' figures
 render for anonymous visitors — but they do need a keyed archive-capable RPC.
-The code still falls back to a public endpoint when `VITE_RPC_URL` is unset, and
+The code still falls back to a public endpoint when `RPC_URL` is unset, and
 on that endpoint (or any other that refuses ranged `eth_getLogs`) the yield
 figures show "—" with an inline error, while TVL, share price, deposits and
 redemptions keep working.

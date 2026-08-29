@@ -45,7 +45,8 @@ export interface VaultAddresses {
   solver: Address;
   // The redemption's `want` token — the base asset the vault accounts in and
   // pays out. Carried per vault because the solver roster carries it per vault;
-  // both products name the same Polygon USDT.
+  // both products name the same Polygon USDT, which the guard enforces and
+  // hands back as the roster's `baseAsset`.
   want: Address;
   accountant: Address;
   // The Lens both products are read through. Deliberately the same address in
@@ -111,6 +112,14 @@ export interface Vault {
 export interface VaultRoster {
   chain: ChainConfig;
   vaults: Vault[];
+  // The base asset every product accounts in and pays out. Chain-level by the
+  // spec's reckoning ("chain id, chain label, explorer base, the shared Lens,
+  // the base asset — are declared once, not per vault"), but stored per vault
+  // in the file, because the solver roster it is shaped after stores it per
+  // vault. Parsing is where the two views meet: the guard holds every entry to
+  // one `want` and hands it back once, so nothing downstream has to pick a
+  // vault to ask.
+  baseAsset: Address;
 }
 
 // Every failure reads "Vault registry: <path> <what was wrong>", so an operator
@@ -257,7 +266,23 @@ export function parseVaultRegistry(raw: unknown): VaultRoster {
     seen.add(vault.id);
   }
 
-  return { chain, vaults };
+  // One base asset across every product. The widget prices, deposits and
+  // redeems in a single token whose decimals it holds, so a registry naming two
+  // would put the other product's figures on the wrong scale with nothing on
+  // screen looking wrong. Multi-asset support is a change to the widget, not a
+  // registry it should quietly accept.
+  const baseAsset = vaults[0].addresses.want;
+  for (const [i, vault] of vaults.entries()) {
+    if (vault.addresses.want.toLowerCase() !== baseAsset.toLowerCase()) {
+      fail(
+        `vaults[${i}].addresses.want`,
+        `is ${show(vault.addresses.want)}, but ${show(vaults[0].id)} names ` +
+          `${show(baseAsset)} — this widget prices every product in one base asset`
+      );
+    }
+  }
+
+  return { chain, vaults, baseAsset };
 }
 
 // The roster's one lookup. An id the registry does not declare is a programming

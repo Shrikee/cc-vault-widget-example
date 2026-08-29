@@ -118,7 +118,9 @@ export function App() {
               </div>
 
               {/* The library's context wraps the write paths and nothing else.
-                  Everything outside it reads the chain directly, per vault. */}
+                  Everything outside it reads the chain directly, per vault, so
+                  the whole page no longer waits on it to be ready — the two
+                  panels say so themselves, beside the button it gates. */}
               <VaultWriteProvider vault={vault}>
                 {tab === "deposit" ? (
                   <DepositPanel

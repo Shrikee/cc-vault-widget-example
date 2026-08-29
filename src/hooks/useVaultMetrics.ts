@@ -1,6 +1,5 @@
 import { useReadContracts } from "wagmi";
 
-import { CHAIN_ID } from "../config/chain";
 import { BASE_ASSET } from "../config/tokens";
 import { decodeVaultMetrics, lensCalls } from "../lib/lens";
 import { errorMessage } from "../lib/logScan";
@@ -22,21 +21,12 @@ export interface VaultMetrics {
 // arguments (see ../lib/lens.ts), so the hook reads whichever product it is
 // handed and holds no vault of its own.
 export function useVaultMetrics(vault: Vault, pollMs = 45_000): VaultMetrics {
-  const [totalAssets, exchangeRate] = lensCalls.vaultMetrics(vault);
-
   const query = useReadContracts({
+    contracts: lensCalls.vaultMetrics(vault),
     // Both calls, or neither: the two figures are read together and a failure
     // in either is the read failing, which is what the library's Promise.all
     // did and what the "—" on screen means.
     allowFailure: false,
-    // Pinned to the vault's chain rather than the connected wallet's. The
-    // library read through its own Polygon provider, so a wallet on the wrong
-    // network still saw TVL and the share price behind the switch-network
-    // banner; leaving the chain to the connection would take that away.
-    contracts: [
-      { ...totalAssets, chainId: CHAIN_ID },
-      { ...exchangeRate, chainId: CHAIN_ID },
-    ],
     // No retry, as the library's bare promise had none: the poll below is the
     // retry, and a read that failed should say so now rather than after a
     // backoff that hides it. The same stance the log scan takes.
@@ -51,7 +41,9 @@ export function useVaultMetrics(vault: Vault, pollMs = 45_000): VaultMetrics {
 
   return {
     tvl: figures?.tvl ?? null,
-    shareValue: figures?.shareValue ?? null,
+    // The glossary's term is "share price"; this field keeps the older name its
+    // consumers already spell, and renaming it is a job of its own.
+    shareValue: figures?.sharePrice ?? null,
     loading: query.isFetching,
     error: query.error ? errorMessage(query.error) : null,
     refetch: query.refetch,

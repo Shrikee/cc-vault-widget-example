@@ -1,5 +1,5 @@
 import { HEADLINE_WINDOW, INITIAL_SHARE_PRICE, WINDOWS } from "../config/history";
-import { computeWindowApy, type WindowApy } from "../lib/apy";
+import { computeWindowApy, type LaunchAnchors, type WindowApy } from "../lib/apy";
 import type { Vault } from "../lib/vaultRegistry";
 import { useNow } from "./useNow";
 import type { ShareHistory } from "./useShareHistory";
@@ -38,7 +38,7 @@ export function useWindowApys(
   // measured since launch instead, and the two products launched five months
   // apart — so a 30-day window is an ordinary trailing window on one and a
   // since-launch measurement on the other, at the same moment.
-  const launch = {
+  const launch: LaunchAnchors = {
     deployTimestamp: vault.ui.deployTimestamp,
     initialSharePrice: INITIAL_SHARE_PRICE,
   };

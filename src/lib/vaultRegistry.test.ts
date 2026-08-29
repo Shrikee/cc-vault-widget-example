@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import shipped from "../config/vaults.json";
-import { DEFAULT_VAULT, DEFAULT_VAULT_ID, ROSTER } from "../config/vaults";
+import { DEFAULT_VAULT_ID, ROSTER } from "../config/vaults";
 import { parseVaultRegistry, vaultById } from "./vaultRegistry";
 
 // Clone the shipped registry and break exactly one field, addressed by path
@@ -39,7 +39,7 @@ describe("the shipped registry", () => {
       "coinchange-30d-polygon",
     ]);
     expect(DEFAULT_VAULT_ID).toBe("coinchange-24h-polygon");
-    expect(DEFAULT_VAULT.ui.symbol).toBe("CCUSD");
+    expect(vaultById(ROSTER, DEFAULT_VAULT_ID).ui.symbol).toBe("CCUSD");
   });
 
   it("declares one chain, shared by both products", () => {
@@ -108,8 +108,13 @@ describe("the shipped registry", () => {
   it("shares one Lens between both products, on purpose", () => {
     const [a, b] = ROSTER.vaults;
     expect(a.addresses.lens).toBe(b.addresses.lens);
-    // …and the same base asset, which is what lets the widget hold one.
-    expect(a.addresses.want).toBe(b.addresses.want);
+  });
+
+  it("hands back the one base asset both products name", () => {
+    // Chain-level by the spec's reckoning, per vault in the file: parsing is
+    // where the two views meet, so nothing downstream picks a vault to ask.
+    expect(ROSTER.baseAsset).toBe("0xc2132D05D31c914a87C6611C10748AEb04B58e8F");
+    expect(ROSTER.vaults.every((v) => v.addresses.want === ROSTER.baseAsset)).toBe(true);
   });
 });
 
@@ -150,6 +155,22 @@ describe("a malformed registry", () => {
   it("names a vault declared on some other chain", () => {
     expect(parseBroken("vaults.1.chain", "arbitrum")).toThrow(
       'Vault registry: vaults[1].chain is not a chain this widget knows: "arbitrum" (known: polygon)'
+    );
+  });
+
+  it("names a product declaring a different base asset", () => {
+    // Native USDC on Polygon — a real address, and the wrong one: the widget
+    // holds one base asset with one set of decimals, so a second would put this
+    // product's figures on the wrong scale with nothing on screen looking wrong.
+    expect(
+      parseBroken(
+        "vaults.1.addresses.want",
+        "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+      )
+    ).toThrow(
+      'Vault registry: vaults[1].addresses.want is "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", ' +
+        'but "coinchange-24h-polygon" names "0xc2132D05D31c914a87C6611C10748AEb04B58e8F" — ' +
+        "this widget prices every product in one base asset"
     );
   });
 

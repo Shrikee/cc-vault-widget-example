@@ -30,6 +30,7 @@
 // change. ./lens.test.ts holds them to it.
 import type { Address } from "viem";
 
+import { CHAIN_ID } from "../config/chain";
 import type { Vault } from "./vaultRegistry";
 
 // Only the four read functions the widget uses. `totalAssets` returns two
@@ -81,18 +82,27 @@ export const LENS_ABI = [
 // under one name because the grouping is the point: these are the only places
 // a vault's addresses become call arguments, so "does this product read its own
 // contracts?" is answered by reading one short file.
+//
+// Every call names the chain it is made on, and it is the vault's chain rather
+// than the connected wallet's. The library read through its own Polygon
+// provider, so a wallet on the wrong network still saw TVL, the share price and
+// its own position behind the switch-network banner; letting the connection
+// decide would take that away. Declaring it here rather than at each call site
+// means there is one place to be wrong.
 export const lensCalls = {
   // Vault-wide, and wallet-free: TVL and the share price render for a visitor
   // with nothing connected.
   vaultMetrics: (vault: Vault) =>
     [
       {
+        chainId: CHAIN_ID,
         address: vault.addresses.lens,
         abi: LENS_ABI,
         functionName: "totalAssets",
         args: [vault.addresses.vault, vault.addresses.accountant],
       },
       {
+        chainId: CHAIN_ID,
         address: vault.addresses.lens,
         abi: LENS_ABI,
         functionName: "exchangeRate",
@@ -109,12 +119,14 @@ export const lensCalls = {
   userPosition: (vault: Vault, user: Address | undefined) =>
     [
       {
+        chainId: CHAIN_ID,
         address: vault.addresses.lens,
         abi: LENS_ABI,
         functionName: "balanceOf",
         args: user ? ([user, vault.addresses.vault] as const) : undefined,
       },
       {
+        chainId: CHAIN_ID,
         address: vault.addresses.lens,
         abi: LENS_ABI,
         functionName: "userUnlockTime",
@@ -131,7 +143,7 @@ export interface VaultMetricsFigures {
   // Total value the vault holds, in the base asset.
   tvl: number;
   // The value of one share in the base asset.
-  shareValue: number;
+  sharePrice: number;
 }
 
 export interface UserPositionFigures {
@@ -151,19 +163,19 @@ export function decodeVaultMetrics(
   return {
     // totalAssets returns (asset, assets); the widget shows the second.
     tvl: Number(totalAssets[1]) / 10 ** baseDecimals,
-    shareValue: Number(exchangeRate) / 10 ** baseDecimals,
+    sharePrice: Number(exchangeRate) / 10 ** baseDecimals,
   };
 }
 
-// Shares are in the VAULT's decimals (18 on both products) — the one place
-// where the two scales in play must not be swapped.
+// `shareDecimals` is the VAULT's, not the base asset's (18 against 6 on both
+// products) — the one place where the two scales in play must not be swapped.
 export function decodeUserPosition(
   result: UserPositionResult,
-  vault: Vault
+  shareDecimals: number
 ): UserPositionFigures {
   const [balance, unlockTime] = result;
   return {
-    shares: Number(balance) / 10 ** vault.ui.decimals,
+    shares: Number(balance) / 10 ** shareDecimals,
     unlockAt: Number(unlockTime),
   };
 }

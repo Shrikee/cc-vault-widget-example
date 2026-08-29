@@ -54,6 +54,21 @@ describe("reading a vault through the Lens", () => {
     expect(rate30.args).toEqual([YIELD_PRIME_30D.addresses.accountant]);
   });
 
+  it("reads on the vault's chain, not on whatever the wallet is connected to", () => {
+    // The library read through its own Polygon provider, so a wallet on the
+    // wrong network still saw the figures behind the switch-network banner.
+    const calls = [
+      ...lensCalls.vaultMetrics(YIELD_PRIME),
+      ...lensCalls.userPosition(YIELD_PRIME_30D, HOLDER),
+    ];
+    expect(calls.map((c) => c.chainId)).toEqual([
+      ROSTER.chain.chainId,
+      ROSTER.chain.chainId,
+      ROSTER.chain.chainId,
+      ROSTER.chain.chainId,
+    ]);
+  });
+
   it("asks for a holder's position with that product's vault and teller", () => {
     const [shares24, unlock24] = lensCalls.userPosition(YIELD_PRIME, HOLDER);
     const [shares30, unlock30] = lensCalls.userPosition(YIELD_PRIME_30D, HOLDER);
@@ -92,24 +107,27 @@ describe("the figures those calls come back with", () => {
   it("reads the share price at the accountant's six decimals", () => {
     // The verified figures, both products: 1.000000 on the 24h line, 1.000122
     // on the 30d one.
-    expect(decodeVaultMetrics([["0x00", 0n], 1_000_000n], BASE_DECIMALS).shareValue).toBe(1);
-    expect(decodeVaultMetrics([["0x00", 0n], 1_000_122n], BASE_DECIMALS).shareValue).toBe(
-      1.000122
-    );
+    const par = decodeVaultMetrics([["0x00", 0n], 1_000_000n], BASE_DECIMALS);
+    const above = decodeVaultMetrics([["0x00", 0n], 1_000_122n], BASE_DECIMALS);
+    expect(par.sharePrice).toBe(1);
+    expect(above.sharePrice).toBe(1.000122);
   });
 
   it("keeps TVL and the share price on the base asset's scale", () => {
-    const { tvl, shareValue } = decodeVaultMetrics(
+    const { tvl, sharePrice } = decodeVaultMetrics(
       [["0x00", 1_234_567_891n], 1_004_321n],
       BASE_DECIMALS
     );
     expect(tvl).toBe(1234.567891);
-    expect(shareValue).toBe(1.004321);
+    expect(sharePrice).toBe(1.004321);
   });
 
-  it("reads shares at the vault's own decimals", () => {
-    const { shares } = decodeUserPosition([1_050_000_000_000_000_000n, 0n], YIELD_PRIME);
+  it("reads shares at the vault's own decimals, not the base asset's", () => {
     expect(YIELD_PRIME.ui.decimals).toBe(18);
+    const { shares } = decodeUserPosition(
+      [1_050_000_000_000_000_000n, 0n],
+      YIELD_PRIME.ui.decimals
+    );
     expect(shares).toBe(1.05);
   });
 
@@ -117,19 +135,25 @@ describe("the figures those calls come back with", () => {
     // 12.345678901234567890 shares does not survive a double, and the last
     // three digits go. That is what the widget has always shown — the library
     // divided a Number by a power of ten too — so it is what this must show.
-    const { shares } = decodeUserPosition([12_345_678_901_234_567_890n, 0n], YIELD_PRIME);
+    const { shares } = decodeUserPosition(
+      [12_345_678_901_234_567_890n, 0n],
+      YIELD_PRIME.ui.decimals
+    );
     expect(shares).toBe(12.345678901234567);
   });
 
   it("reads the share-unlock time as plain unix seconds", () => {
-    const { unlockAt } = decodeUserPosition([0n, 1_787_328_574n], YIELD_PRIME);
+    const { unlockAt } = decodeUserPosition(
+      [0n, 1_787_328_574n],
+      YIELD_PRIME.ui.decimals
+    );
     expect(unlockAt).toBe(1787328574);
   });
 
   it("keeps a never-deposited wallet's unlock time at exactly zero", () => {
     // The deposit scan's precondition: 0 means the wallet has never deposited,
     // and it must not be confused with "not read yet".
-    const { shares, unlockAt } = decodeUserPosition([0n, 0n], YIELD_PRIME);
+    const { shares, unlockAt } = decodeUserPosition([0n, 0n], YIELD_PRIME.ui.decimals);
     expect(shares).toBe(0);
     expect(unlockAt).toBe(0);
   });

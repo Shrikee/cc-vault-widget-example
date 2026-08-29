@@ -1,7 +1,6 @@
 import { useReadContracts } from "wagmi";
 import type { Address } from "viem";
 
-import { CHAIN_ID } from "../config/chain";
 import { decodeUserPosition, lensCalls } from "../lib/lens";
 import { errorMessage } from "../lib/logScan";
 import type { Vault } from "../lib/vaultRegistry";
@@ -30,23 +29,19 @@ export interface UserPosition {
 // cannot land here. An address with nothing cached reads as "not known yet",
 // which is exactly what a switch should say.
 export function useUserPosition(vault: Vault, address?: Address): UserPosition {
-  const [shares, unlockTime] = lensCalls.userPosition(vault, address);
-
   const query = useReadContracts({
-    // Both calls, or neither — see useVaultMetrics for the chain pinning and
-    // the all-or-nothing failure.
+    contracts: lensCalls.userPosition(vault, address),
+    // Both calls, or neither — see useVaultMetrics.
     allowFailure: false,
-    contracts: [
-      { ...shares, chainId: CHAIN_ID },
-      { ...unlockTime, chainId: CHAIN_ID },
-    ],
-    // No retry — see useVaultMetrics. This read is not polled at all: it is
-    // refetched when the wallet changes and after a write, so a failure is a
-    // failure until one of those happens.
+    // No retry either. This read is not polled at all: it is refetched when the
+    // wallet changes and after a write, so a failure is a failure until one of
+    // those happens.
     query: { enabled: Boolean(address), retry: false },
   });
 
-  const figures = query.data ? decodeUserPosition(query.data, vault) : null;
+  const figures = query.data
+    ? decodeUserPosition(query.data, vault.ui.decimals)
+    : null;
 
   return {
     shares: figures?.shares ?? null,

@@ -255,6 +255,15 @@ export function WithdrawPanel({
 
       <InlineError>{validationError}</InlineError>
 
+      {/* The one thing canSubmit gates on that nothing else on the panel can
+          explain: until the library's provider has its contracts in hand, the
+          button below is dead for a reason the user cannot see. This is where
+          the message the whole page used to be replaced by belongs — beside the
+          control it is about. */}
+      {!isBoringV1ContextReady && (
+        <p className="muted small">Connecting to vault contracts…</p>
+      )}
+
       {!address ? (
         <ConnectKitButton.Custom>
           {({ show: showConnect }) => (

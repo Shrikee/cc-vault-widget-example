@@ -40,12 +40,14 @@
 // and it is 3m25s earlier.
 // =============================================================================
 import registry from "./vaults.json";
-import { parseVaultRegistry, vaultById } from "../lib/vaultRegistry";
+import { parseVaultRegistry } from "../lib/vaultRegistry";
 
 export const ROSTER = parseVaultRegistry(registry);
 
-// The 24h product: the established one, and the widget's default. The id is the
-// solver roster's own, so a mismatch between this constant and the JSON is a
-// loud failure at load rather than a lookup returning nothing.
+// The 24h product: the established one, and the widget's default — what an
+// absent or unrecognised selection resolves to. An ID and not a vault, on
+// purpose: nothing may hold one product at module scope, and the vault this
+// names is looked up where a product is being chosen. The id is the solver
+// roster's own, so a mismatch between this constant and the JSON is a loud
+// failure at the lookup rather than one returning nothing.
 export const DEFAULT_VAULT_ID = "coinchange-24h-polygon";
-export const DEFAULT_VAULT = vaultById(ROSTER, DEFAULT_VAULT_ID);

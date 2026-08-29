@@ -5,7 +5,7 @@ import { formatAmount, formatUsd, shortAddress } from "../lib/format";
 import { formatDateTime } from "../lib/time";
 import type { VaultMetrics } from "../hooks/useVaultMetrics";
 import type { ShareHistory } from "../hooks/useShareHistory";
-import type { WindowApy } from "../lib/apy";
+import type { WindowApys } from "../hooks/useWindowApys";
 import { ApyHero } from "./ApyHero";
 import { Badge, Card, InlineError, Stat } from "./ui";
 
@@ -13,7 +13,7 @@ export function VaultStats({
   vault,
   metrics,
   history,
-  windows,
+  apys,
   lastSharePriceUpdateAt,
 }: {
   // The product these figures are for; it names the share token and the
@@ -21,8 +21,9 @@ export function VaultStats({
   vault: Vault;
   metrics: VaultMetrics;
   history: ShareHistory;
-  // The realised trailing APY for each offered window, derived in App.
-  windows: WindowApy[] | null;
+  // The realised trailing APY for each offered window, derived once per product
+  // — the same figures this product's chip carries.
+  apys: WindowApys;
   lastSharePriceUpdateAt: number | null;
 }) {
   const { tvl, shareValue, error } = metrics;
@@ -43,7 +44,7 @@ export function VaultStats({
         )
       }
     >
-      <ApyHero history={history} metrics={metrics} windows={windows} />
+      <ApyHero history={history} apys={apys} />
 
       <div className="stat-grid">
         <Stat

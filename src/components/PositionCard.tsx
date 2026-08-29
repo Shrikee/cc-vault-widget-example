@@ -8,34 +8,70 @@ import { formatDateTime, formatDuration } from "../lib/time";
 import { useNow } from "../hooks/useNow";
 import { Badge, Card, InlineError, Stat } from "./ui";
 
-export function PositionCard({
-  vault,
-  connected,
-  shares,
-  shareValue,
-  unlockAt,
-  depositHistory,
-}: {
-  // The product this position is in — its share symbol labels the holding.
+// What a wallet holds in one product.
+export interface ProductPosition {
+  // The product this position is in — its share symbol labels the holding, so
+  // two positions in one card can never be confused for each other.
   vault: Vault;
-  connected: boolean;
   shares: number | null;
   shareValue: number | null;
   unlockAt: number | null;
   // Earnings is derived here rather than passed in: the average deposit cost
-  // comes from the scan, the shares and share price the card already has.
+  // comes from that product's own scan, the shares and share price the card
+  // already has.
   depositHistory: DepositHistory;
+}
+
+// Every product the depositor holds, in one card.
+//
+// Both positions are shown whichever product is selected (spec, "Layout and
+// selection"): a depositor holding both should see everything they hold in one
+// place, and money in the product they are not looking at must never be
+// invisible. Each figure is per product on purpose — the two share tokens have
+// different share prices and different average deposit costs, so a blended
+// total would be a number that is true of nothing.
+//
+// The card takes its products as an explicit list, which is the whole reason
+// the widget threads a vault argument through every component instead of
+// putting the selected one in a context: a context would have made this card
+// the special case.
+export function PositionCard({
+  connected,
+  positions,
+}: {
+  connected: boolean;
+  positions: ProductPosition[];
 }) {
   const now = useNow();
 
   if (!connected) {
     return (
-      <Card title="Your position">
-        <p className="muted">Connect your wallet to view your position.</p>
+      <Card title="Your positions">
+        <p className="muted">Connect your wallet to view your positions.</p>
       </Card>
     );
   }
 
+  return (
+    <Card title="Your positions">
+      {positions.map((position) => (
+        <ProductPositionBlock
+          key={position.vault.id}
+          position={position}
+          now={now}
+        />
+      ))}
+    </Card>
+  );
+}
+
+function ProductPositionBlock({
+  position: { vault, shares, shareValue, unlockAt, depositHistory },
+  now,
+}: {
+  position: ProductPosition;
+  now: number;
+}) {
   // shareValue is NAV per share in USDT (≈ USD), so position value ≈ USD.
   const positionValue =
     shares !== null && shareValue !== null ? shares * shareValue : null;
@@ -49,11 +85,12 @@ export function PositionCard({
   const sign = earningsUsd === null ? 0 : signAfterRounding(earningsUsd, 2);
   const tone = sign > 0 ? "up" : sign < 0 ? "down" : "flat";
 
-  // The sub-line under Position value. A wallet that never deposited says so
-  // (its scan is skipped outright); a wallet that has since exited its whole
-  // position gets no sub-line, because the figure would be $0.00 regardless of
-  // what it once earned. The error line is doubled by the InlineError below —
-  // the reason belongs beside the figure and in the card's error slot (§6.2).
+  // The sub-line under Position value. A wallet that never deposited into this
+  // product says so (its scan is skipped outright); a wallet that has since
+  // exited its whole position gets no sub-line, because the figure would be
+  // $0.00 regardless of what it once earned. The error line is doubled by the
+  // InlineError below — the reason belongs beside the figure and in the card's
+  // error slot (§6.2).
   const earningsHint: ReactNode =
     depositHistory.status === "none" ? (
       "Earnings — No deposits found for this wallet."
@@ -71,16 +108,16 @@ export function PositionCard({
     );
 
   return (
-    <Card
-      title="Your position"
-      right={
-        locked ? (
+    <div className="position">
+      <div className="position__head">
+        <h3 className="position__name">{vault.ui.name}</h3>
+        {locked ? (
           <Badge tone="warning">Locked</Badge>
         ) : shares && shares > 0 ? (
           <Badge tone="success">Unlocked</Badge>
-        ) : null
-      }
-    >
+        ) : null}
+      </div>
+
       <div className="stat-grid">
         <Stat
           label={`Your ${vault.ui.symbol}`}
@@ -101,7 +138,9 @@ export function PositionCard({
 
       {locked && (
         <div className="notice notice--warning">
-          <strong>Shares locked for {formatDuration(secsLeft)}.</strong>
+          <strong>
+            {vault.ui.symbol} shares locked for {formatDuration(secsLeft)}.
+          </strong>
           <span>
             Unlocks {formatDateTime(unlockAt!)} ({" "}
             {Math.max(0, Math.ceil(secsLeft / 86400))}d remaining). You can
@@ -109,6 +148,6 @@ export function PositionCard({
           </span>
         </div>
       )}
-    </Card>
+    </div>
   );
 }

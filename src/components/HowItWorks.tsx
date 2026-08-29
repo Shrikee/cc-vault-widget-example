@@ -1,11 +1,22 @@
 import type { Vault } from "../lib/vaultRegistry";
+import { hasVestingGap } from "./VestingNotice";
 import { Card } from "./ui";
 
 // Explains the deposit -> lock -> request -> solver-fill timeline so the
 // redemption model (no on-chain claim step) is never a surprise. Told in terms
 // of the product being looked at, down to its share symbol.
+//
+// The timeline is not the same on both products, which is why it is told per
+// product rather than once. The share lock is one day on each, but the 30d
+// product's shares keep vesting for thirty days after that, and a redemption
+// in between is priced against what the holder paid rather than against the
+// share price — a step of its own on that product, and absent on the 24h one
+// where the lock and the vesting term are the same day.
 export function HowItWorks({ vault }: { vault: Vault }) {
   const symbol = vault.ui.symbol;
+  const vests = hasVestingGap(vault);
+  const vestingDays = Math.round(vault.vestingSeconds / 86_400);
+
   const steps = [
     {
       title: "Deposit USDT",
@@ -19,6 +30,14 @@ export function HowItWorks({ vault }: { vault: Vault }) {
       title: "Earn yield",
       body: "Your share price accrues as the strategy earns. Hold for as long as you like.",
     },
+    ...(vests
+      ? [
+          {
+            title: `${vestingDays}-day vesting`,
+            body: `This product's shares vest over ${vestingDays} days — separately from the 1-day lock. Redeem before they vest and the solver prices your shares at what you paid, so the request needs a wider redemption spread to be filled.`,
+          },
+        ]
+      : []),
     {
       title: "Request a redemption",
       body: "Choose how many shares to redeem. This posts a request to the AtomicQueue at NAV minus a small spread.",

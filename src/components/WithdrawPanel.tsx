@@ -19,6 +19,7 @@ import { formatAmount, parseAmount, shortAddress } from "../lib/format";
 import { AmountInput } from "./AmountInput";
 import { Modal } from "./Modal";
 import { RequestRow } from "./RequestRow";
+import { VestingNotice } from "./VestingNotice";
 import { Button, InlineError } from "./ui";
 
 const MAX_VALID_DAYS = 90;
@@ -193,6 +194,10 @@ export function WithdrawPanel({
           <span>{effectiveSpread}</span>
         </div>
       </div>
+
+      {/* Above the spread control, because the spread is the remedy it names:
+          on a product that vests, an exit before it does may need a wider one. */}
+      <VestingNotice vault={vault} where="withdraw" />
 
       <button
         type="button"

@@ -19,6 +19,7 @@ import { projectEarnings, type WindowApy } from "../lib/apy";
 import { formatDuration } from "../lib/time";
 import { AmountInput } from "./AmountInput";
 import { Modal } from "./Modal";
+import { VestingNotice } from "./VestingNotice";
 import { Button, InlineError } from "./ui";
 
 export function DepositPanel({
@@ -171,6 +172,10 @@ export function DepositPanel({
           </>
         )}
       </div>
+
+      {/* On a product whose vesting term outlives its share lock, said before
+          the deposit rather than after an unfilled redemption. */}
+      <VestingNotice vault={vault} where="deposit" />
 
       <InlineError>{validationError}</InlineError>
 

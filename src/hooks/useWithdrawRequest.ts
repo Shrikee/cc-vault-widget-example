@@ -58,8 +58,8 @@ const ATOMIC_QUEUE_ABI = [
 // is no open request (offerAmount == 0). Polls so a filled/expired/stopped
 // request reflects promptly.
 //
-// `onFilled` fires when a poll observes the request transition from open to
-// zeroed. Only a solver fill zeroes the struct (a replace re-populates it, Stop
+// `onFilled` fires when a poll observes THIS product's request transition from
+// open to zeroed. Only a solver fill zeroes the struct (a replace re-populates it, Stop
 // leaves it in place, expiry leaves it in place, and the solver can't fill past
 // the deadline), so a fillable→zero transition means the user got their USDT.
 export function useWithdrawRequest(
@@ -88,14 +88,23 @@ export function useWithdrawRequest(
   const raw = reqQuery.data;
   const allowance = allowanceQuery.data;
 
-  // Fill detection: remember the last observed request per address and fire
-  // onFilled on an open→zero transition (see the function comment). The callback
-  // lives in a ref so a new identity each render doesn't re-run the effect.
+  // Fill detection: remember the last observed request per address AND product,
+  // and fire onFilled on an open→zero transition (see the function comment).
+  // The callback lives in a ref so a new identity each render doesn't re-run
+  // the effect.
+  //
+  // The product belongs in that memory as much as the address does. This hook
+  // follows the selected product, so switching hands it a different queue —
+  // and a depositor with an open 24h request who looks at the 30d product would
+  // otherwise be shown an open→zero transition that is nothing of the kind, and
+  // congratulated on a fill that never happened. A remembered request answers
+  // for the queue it was read from, or for nothing.
   const onFilledRef = useRef(onFilled);
   useEffect(() => {
     onFilledRef.current = onFilled;
   }, [onFilled]);
   const lastSeen = useRef<{
+    vaultId: string;
     addr: `0x${string}`;
     offerAmount: bigint;
     deadline: number;
@@ -109,6 +118,7 @@ export function useWithdrawRequest(
     const prev = lastSeen.current;
     if (
       prev &&
+      prev.vaultId === vault.id &&
       prev.addr === address &&
       prev.offerAmount > 0n &&
       raw.offerAmount === 0n &&
@@ -121,12 +131,13 @@ export function useWithdrawRequest(
       onFilledRef.current?.();
     }
     lastSeen.current = {
+      vaultId: vault.id,
       addr: address,
       offerAmount: raw.offerAmount,
       deadline: Number(raw.deadline),
       inSolve: raw.inSolve,
     };
-  }, [address, raw]);
+  }, [vault.id, address, raw]);
   let request: WithdrawRequest | null = null;
   if (raw && raw.offerAmount > 0n) {
     request = {

@@ -20,8 +20,14 @@ export interface WindowApys {
   // delivered a share price.
   windows: WindowApy[] | null;
   // The headline APY — the 7-day window, the figure the deposit projection
-  // quotes whatever the toggle shows.
+  // quotes whatever the toggle shows. It is what a product's chip carries, so
+  // the two products' returns sit side by side.
   headline: WindowApy | null;
+  // Whether a figure is still on its way, as opposed to not coming: "…" while
+  // the scan or the first poll is outstanding, "—" once either has failed. Both
+  // surfaces that show an APY need the distinction and must not disagree about
+  // it, so it is drawn here with the figures themselves.
+  loading: boolean;
 }
 
 export function useWindowApys(
@@ -54,5 +60,9 @@ export function useWindowApys(
   return {
     windows,
     headline: windows?.find((w) => w.windowDays === HEADLINE_WINDOW) ?? null,
+    loading:
+      history.status !== "error" &&
+      metrics.error === null &&
+      (history.status === "loading" || sharePrice === null),
   };
 }

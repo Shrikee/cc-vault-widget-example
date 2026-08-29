@@ -2,8 +2,8 @@ import { useState } from "react";
 
 import { HEADLINE_WINDOW, WINDOWS } from "../config/history";
 import type { ShareHistory } from "../hooks/useShareHistory";
-import type { VaultMetrics } from "../hooks/useVaultMetrics";
-import { apyHint, trailingWindowHint, type WindowApy } from "../lib/apy";
+import type { WindowApys } from "../hooks/useWindowApys";
+import { apyHint, trailingWindowHint } from "../lib/apy";
 import { fmtPct } from "../lib/format";
 
 // The vault overview's headline: the realised trailing APY over the selected
@@ -27,13 +27,13 @@ type TrailingWindow = (typeof WINDOWS)[number];
 
 export function ApyHero({
   history,
-  metrics,
-  windows,
+  apys,
 }: {
   history: ShareHistory;
-  metrics: VaultMetrics;
-  // One figure per offered window; null while there are none yet.
-  windows: WindowApy[] | null;
+  // This product's figures — one per offered window, and whether they are
+  // still on their way. Derived once per product so the hero and the product's
+  // chip cannot disagree about either.
+  apys: WindowApys;
 }) {
   // Which trailing window is on show. Deliberately local and unpersisted (spec
   // §6.1): a reload returns every visitor to the headline APY, which is also the
@@ -44,13 +44,10 @@ export function ApyHero({
   const failed = history.status === "error";
   // "…" only while something is still on its way. A failed metrics poll leaves
   // the share price null for good — that is a "—", not a wait.
-  const loading =
-    !failed &&
-    metrics.error === null &&
-    (history.status === "loading" || metrics.shareValue === null);
+  const loading = apys.loading;
 
   const figureFor = (windowDays: TrailingWindow) =>
-    windows?.find((w) => w.windowDays === windowDays) ?? null;
+    apys.windows?.find((w) => w.windowDays === windowDays) ?? null;
   const apy = figureFor(selectedWindow);
 
   const value = loading ? "…" : fmtPct(apy?.apyPct ?? null);
@@ -64,7 +61,7 @@ export function ApyHero({
 
   // Nothing to switch between until the figures exist — while the scan is in
   // flight, after it failed, or when the poll never delivered a share price.
-  const tabsDisabled = windows === null;
+  const tabsDisabled = apys.windows === null;
 
   const hint = failed
     ? HISTORY_UNAVAILABLE

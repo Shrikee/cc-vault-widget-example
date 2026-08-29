@@ -1,0 +1,79 @@
+import type { Address } from "viem";
+
+import type { Vault, VaultRoster } from "../lib/vaultRegistry";
+import { useDepositHistory, type DepositHistory } from "./useDepositHistory";
+import { useShareHistory, type ShareHistory } from "./useShareHistory";
+import { useUserPosition, type UserPosition } from "./useUserPosition";
+import { useVaultMetrics, type VaultMetrics } from "./useVaultMetrics";
+import { useWindowApys, type WindowApys } from "./useWindowApys";
+
+// Everything the widget reads about ONE product, for the connected wallet.
+//
+// The widget shows two products at once — both headline APYs on the chips, both
+// position values in the side rail — so these reads are no longer "the vault's".
+// They are a product's, and there is a set of them per product.
+//
+// Nothing new is read here: this is the bundle App already assembled for the
+// one vault it served, given a name so it can be assembled twice.
+
+export interface ProductReads {
+  vault: Vault;
+  metrics: VaultMetrics;
+  history: ShareHistory;
+  // The realised trailing APY for every window, derived once per product: the
+  // chip and the hero show the same figure because they are the same figure.
+  apys: WindowApys;
+  position: UserPosition;
+  depositHistory: DepositHistory;
+}
+
+export function useProductReads(vault: Vault, address?: Address): ProductReads {
+  const metrics = useVaultMetrics(vault);
+  const history = useShareHistory(vault);
+  const position = useUserPosition(vault, address);
+  // The wallet's share-unlock time is the deposit scan's precondition; when the
+  // position read failed there is none, and the sub-line says so rather than
+  // waiting forever.
+  const depositHistory = useDepositHistory(
+    vault,
+    address,
+    position.unlockAt,
+    position.error
+  );
+  const apys = useWindowApys(vault, history, metrics);
+
+  return { vault, metrics, history, apys, position, depositHistory };
+}
+
+// One bundle per product, in the registry's order.
+//
+// The loop is hooks called in a loop, which is safe here for the reason the
+// Rules of Hooks actually state: the same hooks must run in the same order on
+// every render. The roster is parsed once at module load from a JSON file and
+// never changes — no entry is added, removed or reordered while the page is
+// open — so this array's length is a constant of the build.
+//
+// What would break it is filtering: mapping over the SELECTED products, or over
+// the ones a wallet holds, would change the number of hooks between renders.
+// Read every product, always, and let the caller pick.
+export function useRosterReads(
+  roster: VaultRoster,
+  address?: Address
+): ProductReads[] {
+  return roster.vaults.map((vault) => useProductReads(vault, address));
+}
+
+// The bundle for one product. The id comes from the URL resolver, which only
+// ever returns an id the roster declares, so a miss here is a programming error
+// and says so rather than rendering an empty page.
+export function readsById(reads: ProductReads[], id: string): ProductReads {
+  const found = reads.find((r) => r.vault.id === id);
+  if (!found) {
+    throw new Error(
+      `No reads for vault ${JSON.stringify(id)} (read: ${reads
+        .map((r) => r.vault.id)
+        .join(", ")})`
+    );
+  }
+  return found;
+}

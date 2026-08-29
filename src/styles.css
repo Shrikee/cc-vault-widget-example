@@ -576,10 +576,11 @@ a:hover {
 .request--expired {
   border-left-color: var(--danger);
 }
-/* A stopped request is not an expired one: it is still open, and the depositor
-   is the one who stopped it. Its edge matches its badge. */
+/* Stopped shares the expired edge, which is what a stopped row has always
+   looked like — the state has its own class now, but this ticket is about what
+   the row SAYS, and recolouring it was not asked for. */
 .request--stopped {
-  border-left-color: var(--warning);
+  border-left-color: var(--danger);
 }
 .request__line {
   display: flex;

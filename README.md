@@ -169,11 +169,15 @@ USDT.
   both products) and request **validity (days)**. Reads the user's single open
   request **on-chain** via `AtomicQueue.getUserAtomicRequest` (the library's
   `withdrawQueueStatuses` reads a Seven Seas indexer that does not track these
-  vaults), with live lifecycle — **open → filling → expired** — and a **Cancel**
-  action. A new request *replaces* the open one (the on-chain struct is
+  vaults), with live lifecycle — **open → filling → stopped → expired**, stated
+  as an expiry rather than as a claim that the solver will fill — and a **Stop
+  request** action (the approval revoke of the integration guide's §7.4). The
+  request itself is listed in the side rail's **Open redemptions** card, across
+  both queues. A new request *replaces* the open one (the on-chain struct is
   overwritten, not stacked). On the 30d product the panel states the vesting
-  term, that an earlier exit may need a wider spread, and where to ask if a
-  request stays open.
+  term and that an earlier exit — entitled to no more than what was paid, a cap
+  and not a floor — may need a wider spread; an open or lapsed request in that
+  product says on the row itself that it can be passed over, and where to ask.
 - **Resilience** — network-switch banner, toasts driven off the live
   `depositStatus` / `withdrawStatus` objects with explorer links, refetch of
   everything after each successful write.

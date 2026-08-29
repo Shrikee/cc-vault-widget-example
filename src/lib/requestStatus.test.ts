@@ -82,8 +82,9 @@ describe("a request the solver is holding", () => {
 });
 
 describe("a request whose approval was revoked", () => {
-  // This deployment's "stop" (integration guide §7.4): the raw cancel is
-  // admin-gated, so a depositor prevents a fill by revoking the share approval.
+  // The only "stop" either queue supports (integration guide §7.4): the raw
+  // cancel is admin-gated on both vaults, so a depositor prevents a fill by
+  // revoking the share approval.
   // The state stays because the widget genuinely observes it — allowance below
   // the offer — and because what it asserts is a negative.
   const stopped: RequestFacts = { ...OPEN, approved: false };
@@ -142,21 +143,42 @@ describe("the vesting note", () => {
     expect(describeRequest(OPEN, NOW).note).toBeNull();
   });
 
-  it("is only on a request that can still be waiting on the solver", () => {
-    // Filling, stopped and expired each already say why nothing more is coming.
+  it("is said again once the deadline has lapsed", () => {
+    // The outcome the whole disclosure is about: the solver cannot fill below
+    // what a request asks, so one it passes over is never refused with an error
+    // — it runs out of time. "Expired" alone leaves a depositor who has just
+    // watched that happen with nothing to read.
+    const { note } = describeRequest({ ...OPEN_30D, deadline: NOW - 60 }, NOW);
+    expect(note).toContain("capped at what you paid");
+    expect(note).toContain("wider redemption spread");
+    expect(note).toContain("Coinchange support");
+  });
+
+  it("is not on a request nothing is waiting on", () => {
+    // Filling and stopped each already say why: the solver has it, or the
+    // depositor revoked the approval themselves.
     expect(describeRequest({ ...OPEN_30D, inSolve: true }, NOW).note).toBeNull();
     expect(describeRequest({ ...OPEN_30D, approved: false }, NOW).note).toBeNull();
-    expect(
-      describeRequest({ ...OPEN_30D, deadline: NOW - 60 }, NOW).note
-    ).toBeNull();
+  });
+
+  it("is on neither state of a request in the 24h product", () => {
+    expect(describeRequest({ ...OPEN, deadline: NOW - 60 }, NOW).note).toBeNull();
   });
 
   it("claims nothing about this holder's own shares", () => {
     // Whether these shares have vested needs the entitlement arithmetic, which
-    // is stage 2. The note is about the product, and says "may".
-    const { note } = describeRequest(OPEN_30D, NOW);
-    expect(note).toContain("may pass this request over");
-    expect(note).not.toMatch(/your shares (are|have)/i);
+    // is stage 2. Both notes are about the product, and hedge.
+    expect(describeRequest(OPEN_30D, NOW).note).toContain(
+      "may pass this request over"
+    );
+    expect(
+      describeRequest({ ...OPEN_30D, deadline: NOW - 60 }, NOW).note
+    ).toContain("can also go unfilled");
+    for (const state of [OPEN_30D, { ...OPEN_30D, deadline: NOW - 60 }]) {
+      expect(describeRequest(state, NOW).note).not.toMatch(
+        /your shares (are|have)/i
+      );
+    }
   });
 });
 
@@ -167,6 +189,7 @@ describe("no state promises a fill", () => {
     { ...OPEN, inSolve: true },
     { ...OPEN, approved: false },
     { ...OPEN, deadline: NOW - 86_400 },
+    { ...OPEN_30D, deadline: NOW - 86_400 },
   ];
 
   it("anywhere in its wording", () => {

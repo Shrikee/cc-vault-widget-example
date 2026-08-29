@@ -7,8 +7,8 @@ import { hasVestingGap, vestingDays, type Vault } from "../lib/vaultRegistry";
 // product: one day on the 24h line, thirty on the 30d line. So on the 30d
 // product a depositor can redeem long before they have vested, and an unvested
 // holder is entitled to no more than what they paid — a CAP, and not a floor.
-// The solver prices such a lot at the lower of what the holder paid and the
-// share price, so a fallen share price is what they get; what they paid is
+// The solver prices unvested shares at the lower of what their holder paid and
+// the share price, so a fallen share price is what they get; what they paid is
 // never a refund. Saying "priced at what you paid" would be true only while the
 // share price is up, which it is today and need not stay.
 //
@@ -33,7 +33,10 @@ import { hasVestingGap, vestingDays, type Vault } from "../lib/vaultRegistry";
 // read from the deposit tab or from the other product, where neither of these
 // panels is on screen. So the forward-looking half is here, beside the spread
 // control that is the remedy, and the after-the-fact half is beside the request.
-// Neither is in three places.
+// Neither half is on three surfaces. The "how it works" explainer states the
+// cap a third time, which is not the same duplication: retelling the whole
+// deposit → lock → vest → redeem timeline is what that card is for, and it
+// restates the share lock and the redemption step alongside it.
 //
 // Nothing here prices anything. `vestingSeconds` is read for one purpose — to
 // say "30 days" in the depositor's own terms rather than hard-coding it beside

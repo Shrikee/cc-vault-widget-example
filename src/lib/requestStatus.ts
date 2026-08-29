@@ -14,10 +14,11 @@
 //
 // Two states survive that reduction because the widget genuinely observes them.
 // `inSolve` is the queue's own flag, set while the solver holds the request.
-// And an allowance below the offer is this deployment's "stop" (integration
-// guide §7.4): the raw cancel is admin-gated, so revoking the share approval is
-// how a depositor prevents a fill, and a request the solver cannot pull shares
-// for will not be filled at all — a negative the widget can assert.
+// And an allowance below the offer is the only "stop" either queue supports
+// (integration guide §7.4): the raw cancel is admin-gated on both vaults, so
+// revoking the share approval is how a depositor prevents a fill, and a request
+// the solver cannot pull shares for will not be filled at all — a negative the
+// widget can assert.
 //
 // The wording lives here rather than in the row because it is a decision — which
 // of four states a request is in — and because it has to read the same wherever
@@ -50,28 +51,42 @@ export interface RequestDescription {
   badge: string;
   // The sentence under it. Date-free by design — see the header.
   detail: string;
-  // An extra line, or nothing. Only an open request in a vesting product has
-  // one, and it is where the depositor is when the copy matters: looking at a
-  // request that has not filled. The panels say the same thing forwards, before
-  // a deposit and beside the spread control that is the remedy.
+  // An extra line, or nothing. A request in a vesting product has one while it
+  // is open and again once it has lapsed — the two moments a depositor is
+  // looking at a redemption that has not paid out and cannot see why. The
+  // panels say the same thing forwards, before a deposit and beside the spread
+  // control that is the remedy.
   note: string | null;
 }
 
-// The note an open request in a vesting product carries.
+// The two notes a request in a vesting product carries.
 //
-// It says what the widget knows about the PRODUCT — that unvested shares are
+// Both say what the widget knows about the PRODUCT — that unvested shares are
 // capped at what their holder paid, so the solver can pass a request over rather
 // than fill it — and not what it knows about this holder, which is nothing:
 // whether these particular shares have vested needs the entitlement arithmetic
-// of stage 2. "Capped" is the whole claim on purpose. The cap is not a floor: a
-// share price that has fallen below what a holder paid prices them at the share
-// price, and this repository holds no support URL, so support is named and not
-// linked (ADR-0002).
-const VESTING_NOTE =
+// of stage 2. So both say "may" and "can", never "your shares have not vested".
+// "Capped" is the whole claim on purpose: the cap is not a floor, and a share
+// price that has fallen below what a holder paid prices them at the share price.
+// This repository holds no support URL, so support is named and not linked
+// (ADR-0002).
+const VESTING_NOTE_OPEN =
   "Shares that haven't finished vesting are capped at what you paid, so the " +
   "solver may pass this request over and it stays open until its deadline. If " +
   "it does, ask Coinchange support — the solver records a reason for every " +
   "request it passes over.";
+
+// Said again once the deadline has lapsed, because that is the outcome the
+// disclosure was about: the solver cannot fill a request below what it asks, so
+// one it passes over is never refused with an error — it simply runs out of
+// time (ADR-0002, "The deferral"). A depositor reading "Expired" with nothing
+// beside it has just watched the hazard happen and still cannot see it.
+const VESTING_NOTE_EXPIRED =
+  "On this product a request can also go unfilled because of vesting: shares " +
+  "that haven't finished vesting are capped at what you paid, so the solver " +
+  "passes over a request asking for more. A new request at a wider redemption " +
+  "spread can fill where the default cannot, and Coinchange support can quote " +
+  "the reason this one was passed over.";
 
 // Order is the decision, and it is not the order the fields are written in:
 //
@@ -100,7 +115,7 @@ export function describeRequest(
       tone: "danger",
       badge: "Expired",
       detail: "Expired — submit a new request to redeem",
-      note: null,
+      note: request.vestingGap ? VESTING_NOTE_EXPIRED : null,
     };
   }
   if (!request.approved) {
@@ -119,6 +134,6 @@ export function describeRequest(
     // The whole point of the ticket: an expiry, which the deadline establishes,
     // rather than a fillability the solver alone decides.
     detail: `Expires in ${formatDuration(request.deadline - now)}`,
-    note: request.vestingGap ? VESTING_NOTE : null,
+    note: request.vestingGap ? VESTING_NOTE_OPEN : null,
   };
 }

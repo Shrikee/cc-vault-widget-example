@@ -8,8 +8,8 @@ import type { WithdrawRequest } from "../hooks/useWithdrawRequest";
 import { Badge, Button } from "./ui";
 
 // Renders one open AtomicQueue redemption request. The request is filled by an
-// off-chain solver — there is no user "claim" step. This deployment's raw cancel
-// (zeroing the request) is admin-gated, so the depositor's lever to stop a
+// off-chain solver — there is no user "claim" step. The raw cancel (zeroing the
+// request) is admin-gated on both vaults, so the depositor's lever to stop a
 // pending fill is to revoke the share approval; the request itself clears at its
 // deadline.
 //

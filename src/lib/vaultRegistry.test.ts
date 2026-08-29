@@ -229,7 +229,8 @@ describe("what a product's vesting term means", () => {
     // that can be redeemed has already vested and nothing needs disclosing.
     expect(hasVestingGap(vault24h)).toBe(false);
     // 30d: one day locked, thirty days vesting — twenty-nine days in which a
-    // depositor can redeem shares the solver prices at what they paid.
+    // depositor can redeem shares the solver prices at no more than what they
+    // paid: a cap and not a floor.
     expect(hasVestingGap(vault30d)).toBe(true);
   });
 

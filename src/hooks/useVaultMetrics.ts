@@ -37,7 +37,10 @@ export function useVaultMetrics(vault: Vault, pollMs = 45_000): VaultMetrics {
       { ...totalAssets, chainId: CHAIN_ID },
       { ...exchangeRate, chainId: CHAIN_ID },
     ],
-    query: { refetchInterval: pollMs },
+    // No retry, as the library's bare promise had none: the poll below is the
+    // retry, and a read that failed should say so now rather than after a
+    // backoff that hides it. The same stance the log scan takes.
+    query: { refetchInterval: pollMs, retry: false },
   });
 
   // A failed poll leaves the last good figures on screen and adds the reason,

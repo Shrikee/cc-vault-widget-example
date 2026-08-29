@@ -40,7 +40,10 @@ export function useUserPosition(vault: Vault, address?: Address): UserPosition {
       { ...shares, chainId: CHAIN_ID },
       { ...unlockTime, chainId: CHAIN_ID },
     ],
-    query: { enabled: Boolean(address) },
+    // No retry — see useVaultMetrics. This read is not polled at all: it is
+    // refetched when the wallet changes and after a write, so a failure is a
+    // failure until one of those happens.
+    query: { enabled: Boolean(address), retry: false },
   });
 
   const figures = query.data ? decodeUserPosition(query.data, vault) : null;

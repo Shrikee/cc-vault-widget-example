@@ -102,19 +102,23 @@ export const lensCalls = {
 
   // One wallet's holding in one product. The share lock lives on the teller,
   // not the vault, so the unlock time is read against the teller.
-  userPosition: (vault: Vault, user: Address) =>
+  //
+  // `user` is optional because these two calls only exist for a connected
+  // wallet: with no address there are no arguments to make them with, and the
+  // caller leaves the read disabled rather than asking about nobody.
+  userPosition: (vault: Vault, user: Address | undefined) =>
     [
       {
         address: vault.addresses.lens,
         abi: LENS_ABI,
         functionName: "balanceOf",
-        args: [user, vault.addresses.vault],
+        args: user ? ([user, vault.addresses.vault] as const) : undefined,
       },
       {
         address: vault.addresses.lens,
         abi: LENS_ABI,
         functionName: "userUnlockTime",
-        args: [user, vault.addresses.teller],
+        args: user ? ([user, vault.addresses.teller] as const) : undefined,
       },
     ] as const,
 };

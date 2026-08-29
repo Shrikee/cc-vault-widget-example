@@ -10,6 +10,8 @@ import { useWithdrawRequest } from "./hooks/useWithdrawRequest";
 import { usePauseStatus } from "./hooks/usePauseStatus";
 import { useWindowApys } from "./hooks/useWindowApys";
 import { CHAIN_ID, CHAIN_LABEL, SHARE_SYMBOL, VAULT_NAME } from "./config/vault";
+import { DEFAULT_VAULT_ID, ROSTER } from "./config/vaults";
+import { vaultById } from "./lib/vaultRegistry";
 
 import { Header } from "./components/Header";
 import { NetworkBanner } from "./components/NetworkBanner";
@@ -25,6 +27,12 @@ import { Card } from "./components/ui";
 type Tab = "deposit" | "withdraw";
 
 export function App() {
+  // The product every read below is for. It is a constant while one product
+  // renders; the chips and the URL parameter that make it a selection are the
+  // next change, and they replace this line and nothing else.
+  const selectedId = DEFAULT_VAULT_ID;
+  const vault = vaultById(ROSTER, selectedId);
+
   const { isBoringV1ContextReady } = useBoringVaultV1();
   const { address, isConnected, chainId } = useAccount();
   const signer = useEthersSigner({ chainId: CHAIN_ID });
@@ -32,9 +40,9 @@ export function App() {
 
   const [tab, setTab] = useState<Tab>("deposit");
 
-  const metrics = useVaultMetrics();
+  const metrics = useVaultMetrics(vault);
   const history = useShareHistory();
-  const position = useUserPosition(address);
+  const position = useUserPosition(vault, address);
   // The wallet's share-unlock time is the deposit scan's precondition; when the
   // position read failed there is none, and the sub-line says so rather than
   // waiting forever.

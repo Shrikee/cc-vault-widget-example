@@ -88,11 +88,12 @@ function ProductPositionBlock({
 
   // A wallet that holds none of this product gets no sub-line at all: its
   // earnings are $0.00 against any average deposit cost, so the figure would
-  // say nothing about what it once earned. "skipped" is that same wallet caught
-  // BEFORE the scan rather than after — the deposit history behind a figure
-  // nobody would see is not read (src/lib/scanPlan.ts) — so the two cases read
-  // identically on screen, which is the point.
-  const nothingToEarnOn = shares === 0 || depositHistory.status === "skipped";
+  // say nothing about what it once earned. The two halves are one rule read at
+  // two moments — "no-shares" is the scan declining to read a deposit history
+  // nobody would see a figure from (src/lib/scanPlan.ts), and `shares === 0`
+  // covers the frame between a balance reaching zero and the effect that says
+  // so.
+  const nothingToEarnOn = shares === 0 || depositHistory.status === "no-shares";
 
   // The sub-line under Position value. A wallet with no deposits in this
   // product says so — the block's own heading names which product that is. The

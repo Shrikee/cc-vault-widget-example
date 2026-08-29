@@ -13,7 +13,8 @@
 import { describe, expect, it } from "vitest";
 
 import { ROSTER } from "../config/vaults";
-import { HEADLINE_WINDOW, LOG_CHUNK_SPAN } from "../config/history";
+import { HEADLINE_WINDOW } from "../config/history";
+import { chunkRanges } from "./logScan";
 import { vaultById } from "./vaultRegistry";
 import {
   FULL_WINDOW_DAYS,
@@ -30,13 +31,12 @@ const HEAD = 92_835_789n;
 const VAULT_24H = vaultById(ROSTER, "coinchange-24h-polygon");
 const VAULT_30D = vaultById(ROSTER, "coinchange-30d-polygon");
 
-// The provider caps a ranged eth_getLogs at LOG_CHUNK_SPAN blocks, so a range
-// costs requests, not blocks. This is src/lib/logScan.ts's chunker counted
-// rather than run: its ranges are inclusive at both ends, so it steps by
-// span + 1.
+// The provider caps a ranged eth_getLogs at 10,000 blocks, so a range costs
+// requests, not blocks — and what this ticket is about is the requests. Counted
+// with the scanner's own chunker, so the figures below cannot drift from what
+// the widget would actually ask for.
 function chunks(range: BlockRange | null): number {
-  if (range === null) return 0;
-  return Number((range.to - range.from) / BigInt(LOG_CHUNK_SPAN + 1)) + 1;
+  return range === null ? 0 : chunkRanges(range.from, range.to).length;
 }
 
 const span = (range: BlockRange | null) =>
@@ -117,7 +117,7 @@ describe("windowing an unselected product to its headline APY", () => {
     expect(HEADLINE_WINDOW).toBe(7);
   });
 
-  it("scans a week rather than a month, at a quarter of the requests", () => {
+  it("scans a week rather than a month, at under half the requests", () => {
     const unselected = planShares(VAULT_24H, scanWindowDays(false));
     expect(unselected?.from).toBe(HEAD - 403_200n); // 57,600 blocks/day × 7
     expect(chunks(unselected)).toBe(41);

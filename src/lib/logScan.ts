@@ -46,8 +46,10 @@ const CHUNK_BUDGET = createInFlightBudget(historyChunksInFlight(), {
 
 const toHex = (n: bigint): Hex => `0x${n.toString(16)}`;
 
-// [fromBlock, toBlock] split into ranges the provider will accept.
-function chunkRanges(fromBlock: bigint, toBlock: bigint): [bigint, bigint][] {
+// [fromBlock, toBlock] split into ranges the provider will accept. Exported so
+// the scan-planning vectors can count what a plan costs in REQUESTS with the
+// same splitter that issues them, rather than restating the arithmetic.
+export function chunkRanges(fromBlock: bigint, toBlock: bigint): [bigint, bigint][] {
   const span = BigInt(LOG_CHUNK_SPAN);
   const ranges: [bigint, bigint][] = [];
   for (let start = fromBlock; start <= toBlock; start += span + 1n) {

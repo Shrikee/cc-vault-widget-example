@@ -50,10 +50,19 @@ export function useWindowApys(
   };
 
   // Arithmetic over ≤ 60 events — cheap enough to redo on each tick.
+  //
+  // Only over the windows the scan actually covers. An unselected product is
+  // scanned for its headline APY alone, and a 30-day figure taken off a week of
+  // events would open at the price a week ago while calling itself a month —
+  // understating the return, with nothing on screen looking amiss. The selected
+  // product's history covers every window (useShareHistory says "loading" until
+  // it does), so this filters nothing where the hero reads it, and the chip
+  // reads the headline, which every scan covers.
   const windows =
     history.status === "ready" && sharePrice !== null
-      ? WINDOWS.map((windowDays) =>
-          computeWindowApy(launch, history.events, sharePrice, now, windowDays)
+      ? WINDOWS.filter((windowDays) => windowDays <= history.coversDays).map(
+          (windowDays) =>
+            computeWindowApy(launch, history.events, sharePrice, now, windowDays)
         )
       : null;
 

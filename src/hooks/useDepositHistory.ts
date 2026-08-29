@@ -7,7 +7,12 @@ import { DEPOSIT_TOKENS } from "../config/tokens";
 import { TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED } from "../config/history";
 import { decodeDepositLog, reconstructDeposits, type DepositLog } from "../lib/apy";
 import { errorMessage, scanLogs } from "../lib/logScan";
-import { depositScanRange, planDepositScan } from "../lib/scanPlan";
+import {
+  depositScanRange,
+  planDepositScan,
+  type DepositScanInput,
+  type DepositScanPlan,
+} from "../lib/scanPlan";
 import type { Vault } from "../lib/vaultRegistry";
 import {
   NO_SCANS,
@@ -27,7 +32,10 @@ import {
 //
 // Scanned ONCE per wallet per product, from that product's LEDGER FLOOR,
 // filtered to the wallet: 94 chunks on the 24h product today and 43 on the 30d
-// one, growing ~19 a month each. Three things keep that bearable.
+// one. Unlike the share-price scan it has no window to clamp to — an average
+// deposit cost is over ALL of a wallet's deposits — so it grows with the
+// product's age, by ~173 chunks a month at Polygon's block rate. Three things
+// keep that bearable.
 // A wallet that holds none of a product has no earnings to compute there, so
 // there is nothing to scan for — whether it never deposited or has since exited
 // the whole position (src/lib/scanPlan.ts decides which, because the two say
@@ -45,11 +53,12 @@ import {
 // precondition and report its earnings here.
 
 export interface DepositHistoryState {
-  // "none" is a wallet that never deposited into this product; "skipped" is one
-  // that holds none of it now. Both mean no scan was issued and neither is
-  // coming, and they are kept apart because the sub-line under the position
-  // value says something different about each (spec §6.4).
-  status: "idle" | "none" | "skipped" | "loading" | "ready" | "error";
+  // "none" is a wallet that never deposited into this product; "no-shares" is
+  // one that holds none of it now, named for the plan it comes from
+  // (src/lib/scanPlan.ts). Both mean no scan was issued and neither is coming,
+  // and they are kept apart because the sub-line under the position value says
+  // something different about each (spec §6.4).
+  status: "idle" | "none" | "no-shares" | "loading" | "ready" | "error";
   // Average deposit cost: base asset paid per CCUSD, across surviving deposits.
   avgCost?: number;
   deposited?: number;
@@ -111,14 +120,10 @@ function summarise(logs: DepositLog[], lastScannedBlock: bigint): DepositHistory
 }
 
 // What the scan is planned from — the wallet's holding in THIS product. A
-// UserPosition is one; the hook takes only the three fields it plans with, so
-// the read it comes from is free to change around it.
-export interface DepositScanPosition {
-  // Shares held now. A wallet holding none has no earnings to compute here, so
-  // nothing is scanned. null while the read has not landed.
-  shares: number | null;
-  // Share-unlock time, unix seconds; 0 for a wallet that never deposited.
-  unlockAt: number | null;
+// UserPosition is one; the hook takes only what it plans with, so the read it
+// comes from is free to change around it. The two figures the plan is made of
+// are the planner's own type, stated once there.
+export interface DepositScanPosition extends DepositScanInput {
   // Why the position is unknown, when it is. It is the scan's precondition, and
   // without it there is no telling a never-deposited wallet from a depositor —
   // so the sub-line reports the failure instead of waiting on "…" for a value
@@ -142,13 +147,13 @@ const NOT_SCANNED = {
   // $0.00 whatever it paid, so the position card shows no sub-line and the
   // teller history behind that figure is never read. A later deposit moves the
   // balance off zero and brings the effect back here.
-  "no-shares": { status: "skipped" },
-} as const satisfies Record<string, DepositHistoryState>;
+  "no-shares": { status: "no-shares" },
+} as const satisfies Record<Exclude<DepositScanPlan, "scan">, DepositHistoryState>;
 
 export function useDepositHistory(
   vault: Vault,
-  address?: string,
-  position: DepositScanPosition = { shares: null, unlockAt: null, error: null }
+  address: string | undefined,
+  position: DepositScanPosition
 ): DepositHistory {
   const { shares, unlockAt, error: positionError } = position;
   const client = usePublicClient({ chainId: CHAIN_ID });
@@ -186,8 +191,10 @@ export function useDepositHistory(
         });
         // A tail with nothing new to read: the chain has not moved past the
         // cursor since the last scan.
-        const raw =
-          from > to ? [] : await scanWallet(client, vault, address, from, to);
+        const nothingNew = from > to;
+        const raw = nothingNew
+          ? []
+          : await scanWallet(client, vault, address, from, to);
         if (!isCurrent(runs.current, scan)) return; // overtaken — drop it
 
         const found = raw.map(decodeDepositLog);
@@ -195,7 +202,7 @@ export function useDepositHistory(
         // sums are recomputed over the whole set, and a nonce already counted
         // is not counted twice.
         const folded = scan.kind === "full" ? found : [...logs.current, ...found];
-        const cursor = from > to ? (runs.current.cursor ?? to) : to;
+        const cursor = nothingNew ? (runs.current.cursor ?? to) : to;
         const next = summarise(folded, cursor);
 
         logs.current = folded;

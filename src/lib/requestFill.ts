@@ -25,7 +25,7 @@ export interface QueueSnapshot {
   // The wallet the struct was read for.
   owner: Address;
   offerAmount: bigint; // shares offered; 0 ⇒ no open request
-  deadline: number; // unix seconds the request stays fillable until
+  deadline: number; // unix seconds the request stays open until
   inSolve: boolean; // the solver held it when this was read
 }
 

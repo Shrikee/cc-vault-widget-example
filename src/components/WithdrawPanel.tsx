@@ -200,7 +200,7 @@ export function WithdrawPanel({
           </label>
           <label className="field">
             <span>
-              Valid for (days) — how long the request stays fillable before its
+              Valid for (days) — how long the request stays open before its
               deadline lapses. Leave blank for {WITHDRAW_VALID_DAYS_DEFAULT} days.
             </span>
             <input

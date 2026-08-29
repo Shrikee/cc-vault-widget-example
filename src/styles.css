@@ -576,6 +576,11 @@ a:hover {
 .request--expired {
   border-left-color: var(--danger);
 }
+/* A stopped request is not an expired one: it is still open, and the depositor
+   is the one who stopped it. Its edge matches its badge. */
+.request--stopped {
+  border-left-color: var(--warning);
+}
 .request__line {
   display: flex;
   align-items: center;
@@ -600,6 +605,16 @@ a:hover {
 }
 .request__meta .dot {
   opacity: 0.5;
+}
+/* The vesting note under an open request on a product that vests. Sized like
+   the meta line above it, since it is context and not a warning banner — the
+   panels carry the warning, before the request is posted. */
+.request__note {
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 6px 0 0;
+  max-width: 52ch;
 }
 .request__actions {
   display: flex;

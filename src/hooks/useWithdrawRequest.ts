@@ -10,7 +10,7 @@ import type { Vault } from "../lib/vaultRegistry";
 export interface WithdrawRequest {
   shares: number; // CCUSD shares offered for redemption
   minPrice: number; // min USDT the user accepts per share (atomicPrice)
-  deadline: number; // unix seconds the request stays fillable until
+  deadline: number; // unix seconds the request stays open until
   inSolve: boolean; // the solver is currently filling it
   // CCUSD allowance to the queue still covers the request. This vault's raw
   // `updateAtomicRequest` (cancel/zero) is admin-gated, so a user "cancels" by
@@ -55,7 +55,7 @@ const ATOMIC_QUEUE_ABI = [
 
 // Reads the connected user's open AtomicQueue redemption request for the vault's
 // shares → WITHDRAW_TOKEN (USDT), plus their CCUSD allowance to the queue (so the
-// UI can tell whether the request is actually fillable). Returns null when there
+// UI can tell a stopped request from an open one). Returns null when there
 // is no open request (offerAmount == 0). Polls so a filled/expired/stopped
 // request reflects promptly.
 //

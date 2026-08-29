@@ -285,7 +285,10 @@ issues the requests.
   still-locked deposit, and the widget already carries a distinct state for a revoked approval.
   One honest string is better than two divergent ones.
 - The 30d deposit and withdraw panels state that the product vests over thirty days, that an exit
-  before then may require a wider redemption spread, and where to ask if a request stays open.
+  before then may require a wider redemption spread. Where to ask, and what a request sitting open
+  means, belong to the request row rather than the panels: open requests render in the side rail,
+  outside the selection and outside the tabs, so a 30d request is normally read with no 30d panel on
+  screen.
 - The "how it works" explainer becomes product-aware, since its share-lock and redemption steps
   differ in emphasis between the two products.
 - Header, hero and footer name the selected product.

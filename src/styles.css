@@ -906,3 +906,23 @@ a:hover {
   font-size: 0.95rem;
   font-weight: 700;
 }
+
+/* ---------- open redemptions card ----------
+   One block per open request, in whichever queue it is, labelled with the
+   product it belongs to: the row under it carries the share symbol, and a
+   wallet with a request in both queues sees both. */
+.redemption + .redemption {
+  border-top: 1px solid var(--border);
+  margin-top: 18px;
+  padding-top: 16px;
+}
+.redemption__product {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+/* The row was written for the withdraw panel, where a bottom margin separated
+   it from what followed. In the card it is the last thing in its block. */
+.redemption .request {
+  margin-bottom: 0;
+}

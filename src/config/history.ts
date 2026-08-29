@@ -24,10 +24,21 @@ export const INITIAL_SHARE_PRICE = 1;
 // against the Polygon endpoint — it rejects wider ranges with code -32614.
 export const LOG_CHUNK_SPAN = 10_000;
 
-// 57,600 blocks/day × 30 — the flat span every share-price scan covers.
-// Polygon produces a block roughly every 1.5 s (measured over the trailing
-// 100k blocks), so a 30-day window is ~8x the block count it was on Ethereum.
-export const BLOCKS_30D = 1_728_000;
+// How a number of days of history becomes a number of blocks — the unit every
+// scan span is built from (src/lib/scanPlan.ts).
+//
+// Polygon produces a block roughly every 1.5 s, so a day is 57,600 blocks and a
+// 30-day window ~8x the block count it was on Ethereum. Measured over the
+// trailing 100k blocks when this was written, and again on 2026-08-28 against
+// both products' whole lives: 939,305 blocks in the 24h vault's 1,408,958
+// seconds and 425,555 in the 30d vault's 638,333 are both 1.500 s/block.
+//
+// It is an estimate, and it is the reason a scan span is not exactly its
+// window: were blocks to come faster than 1.5 s, a span would cover fewer days
+// than it names. That has been true of the 30-day span since this widget
+// shipped; what this ticket adds is a 7-day span for the unselected product's
+// headline APY, which carries the same estimate and no more.
+export const BLOCKS_PER_DAY = 57_600;
 
 // Trailing windows offered for the realised trailing APY; the headline is 7 d.
 export const WINDOWS = [3, 7, 30] as const;

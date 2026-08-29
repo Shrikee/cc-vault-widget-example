@@ -27,9 +27,17 @@ export interface ProductReads {
   depositHistory: DepositHistory;
 }
 
-export function useProductReads(vault: Vault, address?: Address): ProductReads {
+export function useProductReads(
+  vault: Vault,
+  // Whether this is the product on show. Nothing here renders it — it is what
+  // the share-price scan windows itself by: the selected product's stats card
+  // offers every trailing window, the other one contributes a single headline
+  // APY to a chip and scans that window alone (spec, "RPC budget").
+  selected: boolean,
+  address?: Address
+): ProductReads {
   const metrics = useVaultMetrics(vault);
-  const history = useShareHistory(vault);
+  const history = useShareHistory(vault, selected);
   const position = useUserPosition(vault, address);
   // The wallet's share-unlock time is the deposit scan's precondition; when the
   // position read failed there is none, and the sub-line says so rather than
@@ -58,9 +66,15 @@ export function useProductReads(vault: Vault, address?: Address): ProductReads {
 // Read every product, always, and let the caller pick.
 export function useRosterReads(
   roster: VaultRoster,
+  selectedId: string,
   address?: Address
 ): ProductReads[] {
-  return roster.vaults.map((vault) => useProductReads(vault, address));
+  return roster.vaults.map((vault) =>
+    // The selection is passed DOWN to each product rather than used to pick
+    // which products to read: it changes how much each scan asks for, never how
+    // many hooks run.
+    useProductReads(vault, vault.id === selectedId, address)
+  );
 }
 
 // The bundle for one product. The id comes from the URL resolver, which only

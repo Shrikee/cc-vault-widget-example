@@ -41,7 +41,7 @@ export function App() {
   // own headline APY and the side rail shows a position in each, so a figure
   // that only existed for the selected product would be a blank card for the
   // one the depositor is not looking at.
-  const products = useRosterReads(ROSTER, address);
+  const products = useRosterReads(ROSTER, selectedId, address);
   const { vault, metrics, history, apys, position, depositHistory } = readsById(
     products,
     selectedId

@@ -1,5 +1,9 @@
 import type { Hex, PublicClient } from "viem";
-import { LOG_CHUNK_SPAN, historyChunksInFlight } from "../config/history";
+import {
+  LOG_CHUNK_SPAN,
+  SCAN_REQUESTS_PER_SECOND,
+  historyChunksInFlight,
+} from "../config/history";
 import { createInFlightBudget, mapWithBudget } from "./inFlightBudget";
 
 // Chunked eth_getLogs scan — the one read the yield figures are built on.
@@ -32,10 +36,13 @@ export interface ScanLogsParams {
   toBlock: bigint;
 }
 
-// The app's one budget, sized once at load. The size is a property of the
-// endpoint rather than of any caller, so no caller passes it: a scan asks for
-// its chunks and waits its turn like every other scan.
-const CHUNK_BUDGET = createInFlightBudget(historyChunksInFlight());
+// The app's one budget, sized once at load. Both numbers in it are the
+// endpoint's rather than any caller's — how many requests it will have in
+// flight and how many it will take per second — so no caller passes either: a
+// scan asks for its chunks and waits its turn like every other scan.
+const CHUNK_BUDGET = createInFlightBudget(historyChunksInFlight(), {
+  requestsPerSecond: SCAN_REQUESTS_PER_SECOND,
+});
 
 const toHex = (n: bigint): Hex => `0x${n.toString(16)}`;
 

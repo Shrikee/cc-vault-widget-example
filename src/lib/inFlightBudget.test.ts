@@ -147,3 +147,108 @@ describe("one scan on its own", () => {
     expect(chain.peak).toBe(1);
   });
 });
+
+// A clock the test owns: nothing ever waits, and time jumps to whatever is
+// waiting next. Pacing is then asserted exactly rather than raced against a
+// real timer.
+function fakeClock() {
+  let now = 0;
+  let waiters: { at: number; wake: () => void }[] = [];
+
+  return {
+    now: () => now,
+    sleep: (ms: number) =>
+      new Promise<void>((wake) => {
+        waiters.push({ at: now + ms, wake });
+      }),
+    // Run `work` to completion, advancing to the next wake-up whenever nothing
+    // else can proceed — the event loop a real timer would give, without the
+    // waiting.
+    async run<T>(work: Promise<T>): Promise<T> {
+      let running = true;
+      const finished = work.then(
+        (v) => {
+          running = false;
+          return v;
+        },
+        (e) => {
+          running = false;
+          throw e;
+        }
+      );
+      finished.catch(() => {}); // an early rejection is the test's to assert
+      for (let step = 0; step < 1000 && running; step++) {
+        await new Promise((r) => setTimeout(r, 0));
+        if (!running || waiters.length === 0) continue;
+        now = Math.max(now, Math.min(...waiters.map((w) => w.at)));
+        const due = waiters.filter((w) => w.at <= now);
+        waiters = waiters.filter((w) => w.at > now);
+        for (const w of due) w.wake();
+      }
+      return finished;
+    },
+  };
+}
+
+// Concurrency is a proxy for what the endpoint actually limits, and a poor one:
+// QuickNode counts 50 REQUESTS PER SECOND, so what four in flight come to
+// depends entirely on how fast the endpoint answers. Measured against the
+// archive endpoint on 2026-08-28, four in flight ran at 51-57 req/s at 68-94 ms
+// latency and drew code -32007 on a two-product cold load. The budget therefore
+// paces itself as well as counting itself.
+describe("the rate the budget runs at", () => {
+  it("starts no more requests in a second than it is allowed", async () => {
+    const clock = fakeClock();
+    const budget = createInFlightBudget(4, { requestsPerSecond: 4, clock });
+
+    const starts: number[] = [];
+    await clock.run(
+      mapWithBudget(chunks("a", 9), budget, async () => {
+        starts.push(clock.now());
+      })
+    );
+
+    expect(starts).toHaveLength(9);
+    // Every one-second window, not just the first: a burst that repaid itself
+    // later would still be a burst.
+    for (const start of starts) {
+      const inWindow = starts.filter((t) => t >= start && t < start + 1000);
+      expect(inWindow.length).toBeLessThanOrEqual(4);
+    }
+    // Spaced evenly rather than four at once and a wait — the limiter counts
+    // the burst, not the average.
+    expect(starts).toEqual([0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000]);
+  });
+
+  it("paces scans against each other, not just within one", async () => {
+    const clock = fakeClock();
+    const budget = createInFlightBudget(4, { requestsPerSecond: 4, clock });
+
+    const starts: number[] = [];
+    const record = async () => {
+      starts.push(clock.now());
+    };
+    await clock.run(
+      Promise.all([
+        mapWithBudget(chunks("a", 3), budget, record),
+        mapWithBudget(chunks("b", 3), budget, record),
+      ])
+    );
+
+    expect(starts).toEqual([0, 250, 500, 750, 1000, 1250]);
+  });
+
+  it("does not pace at all when no rate is set", async () => {
+    const clock = fakeClock();
+    const budget = createInFlightBudget(2, { clock });
+
+    const starts: number[] = [];
+    await clock.run(
+      mapWithBudget(chunks("a", 6), budget, async () => {
+        starts.push(clock.now());
+      })
+    );
+
+    expect(starts).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+});

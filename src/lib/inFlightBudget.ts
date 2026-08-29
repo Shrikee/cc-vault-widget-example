@@ -10,6 +10,17 @@
 // matters is the endpoint's, so the budget has to be the endpoint's too: one,
 // shared, for the whole app.
 //
+// The budget counts two things, because the endpoint limits two things. It
+// limits how many requests are in flight — that is the number src/config/
+// history.ts records — and it limits how many arrive per second, which is what
+// QuickNode's 50/s account limit actually is. Concurrency alone is a proxy for
+// the second, and a poor one: how many requests four in flight come to depends
+// entirely on how fast the endpoint answers. Measured against the archive
+// endpoint on 2026-08-28, four in flight ran at 51-57 eth_getLogs a second at
+// 68-94 ms latency, and a two-product cold load drew code -32007 — the very
+// error the in-flight budget was raised to prevent, arriving by the other door.
+// So the budget also paces itself.
+//
 // The queue is FIFO across scans rather than fair between them. A scan that
 // queues behind another therefore starts later than it used to, which is the
 // cost of the trade and is why the cold load is slower with two products until
@@ -20,16 +31,44 @@
 // more than N in flight, and every scan still completes.
 
 export interface InFlightBudget {
-  // Wait for a slot, run the task, and hand the slot on. Rejections pass
-  // straight through, with the slot released either way.
+  // Wait for a slot and for this request's turn in the second, run the task,
+  // and hand the slot on. Rejections pass straight through, with the slot
+  // released either way.
   run<T>(task: () => Promise<T>): Promise<T>;
   // The budget as it was actually applied — at least one, whatever it was
   // configured with.
   readonly limit: number;
 }
 
-export function createInFlightBudget(limit: number): InFlightBudget {
+// Time, so the pacing can be asserted exactly instead of raced against a timer.
+// The default is the real one; the vectors pass a clock they move themselves.
+export interface BudgetClock {
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+}
+
+const REAL_CLOCK: BudgetClock = {
+  now: () => Date.now(),
+  sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+};
+
+export interface BudgetOptions {
+  // Requests a second, across every scan. Omitted means no pacing at all,
+  // which is what a caller that only cares about concurrency wants.
+  requestsPerSecond?: number;
+  clock?: BudgetClock;
+}
+
+export function createInFlightBudget(
+  limit: number,
+  { requestsPerSecond, clock = REAL_CLOCK }: BudgetOptions = {}
+): InFlightBudget {
   const size = Math.max(1, Math.floor(limit));
+  // Starts are spaced by this, so a second can never hold more than the rate
+  // allows. Evenly rather than in bursts: the limiter counts the burst, not
+  // the average.
+  const spacingMs =
+    requestsPerSecond && requestsPerSecond > 0 ? 1000 / requestsPerSecond : 0;
   // Slots taken, not tasks running: a slot stays taken while it is handed from
   // a finished task to the next waiter, so nothing can slip into the gap
   // between the two. Re-checking `taken < size` on release instead would leave
@@ -52,11 +91,25 @@ export function createInFlightBudget(limit: number): InFlightBudget {
     else taken--;
   };
 
+  // The earliest moment the next request may start. Reserving is synchronous,
+  // so two tasks that reach it in the same tick take different slots — which is
+  // what makes the spacing hold across scans and not merely within one.
+  let nextStartAt = 0;
+  const reserveDelay = (): number => {
+    if (spacingMs === 0) return 0;
+    const now = clock.now();
+    const startAt = Math.max(now, nextStartAt);
+    nextStartAt = startAt + spacingMs;
+    return startAt - now;
+  };
+
   return {
     limit: size,
     async run<T>(task: () => Promise<T>): Promise<T> {
       await acquire();
       try {
+        const delay = reserveDelay();
+        if (delay > 0) await clock.sleep(delay);
         return await task();
       } finally {
         release();

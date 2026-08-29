@@ -52,15 +52,37 @@ export const TOPIC_DEPOSIT_REFUNDED =
   "0xaf98ea774275cadfa3e477a7b52cba03e01197445a76bd5d0d561608708c3624";
 
 // How many eth_getLogs chunk requests the widget keeps in flight AT ONCE,
-// across every scan it is running. 4 is measured safe against QuickNode's
-// 50 req/s limit; 8 trips it (code -32007). On Polygon a full 30-day span is
-// ~173 chunks, so a cold scan takes a few seconds.
+// across every scan it is running. 4 was measured against QuickNode's 50 req/s
+// limit and 8 trips it outright (code -32007). On Polygon a full 30-day span is
+// ~173 chunks.
 //
 // Global rather than per scan, and that is the whole point of the number: with
 // two products a cold load runs up to four scans at once, and four scans of
-// four would be sixteen concurrent requests — twice what already trips the
-// limiter. src/lib/inFlightBudget.ts is where the sharing happens.
+// four would be sixteen concurrent requests — four times what the limiter
+// tolerates. src/lib/inFlightBudget.ts is where the sharing happens.
+//
+// This number alone does NOT keep the widget inside the limit; the rate below
+// is what does. Four in flight is 51-57 req/s at the latency measured on
+// 2026-08-28, which is over the limit on its own.
 export const DEFAULT_CHUNKS_IN_FLIGHT = 4;
+
+// How many eth_getLogs the widget may START per second, across every scan.
+//
+// The in-flight budget above is not by itself a rate: how many requests four in
+// flight come to depends on how fast the endpoint answers, and the endpoint's
+// actual limit is a rate — QuickNode allows 50 requests a second across the
+// whole account, the widget's polls included. Measured against the archive
+// endpoint on 2026-08-28, four in flight ran at 51-57 req/s at 68-94 ms
+// latency, and a two-product cold load drew code -32007 on chunks that had not
+// exceeded the in-flight budget at all. (The earlier "4 is measured safe" was
+// measured when one product scanned alone and the endpoint answered slower.)
+//
+// 35 leaves headroom under the 50 for what else the page is doing — the
+// vault-metrics, pause, position and balance reads all count against the same
+// limiter, and about a dozen of them land in the first second. A cold load is
+// slower for it, which is the trade this ticket accepts: the scan that finishes
+// is worth more than the scan that fails, and there is no retry to fall back on.
+export const SCAN_REQUESTS_PER_SECOND = 35;
 
 // Read inside a function rather than at module scope. That began as a hard
 // constraint: src/lib/apy.ts imports the constants above, and the vectors drove

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { erc20Abi } from "viem";
 import { useReadContract } from "wagmi";
 import { WITHDRAW_TOKEN } from "../config/tokens";
+import { isFillTransition, type QueueSnapshot } from "../lib/redemptions";
 import { nowSeconds } from "../lib/time";
 import type { Vault } from "../lib/vaultRegistry";
 
@@ -58,11 +59,16 @@ const ATOMIC_QUEUE_ABI = [
 // is no open request (offerAmount == 0). Polls so a filled/expired/stopped
 // request reflects promptly.
 //
+// One instance per product, and every product always: the widget polls BOTH
+// AtomicQueues so that a redemption in flight is never hidden by looking at the
+// other product, and so that the fill confirmation fires whichever product
+// filled (spec, "Redemptions").
+//
 // `onFilled` fires when a poll observes THIS product's request transition from
-// open to zeroed. Only a solver fill zeroes the struct (a replace re-populates
-// it, Stop leaves it in place, expiry leaves it in place, and the solver can't
-// fill past the deadline), so a fillable→zero transition means the user got
-// their USDT.
+// open to zeroed — the decision, and the several ways of vanishing that are not
+// that, are in ../lib/redemptions.ts. The caller is told nothing about which
+// product filled because it does not need telling: it handed this instance the
+// vault, so the callback it passed is already about that one.
 export function useWithdrawRequest(
   vault: Vault,
   address?: `0x${string}`,
@@ -89,55 +95,43 @@ export function useWithdrawRequest(
   const raw = reqQuery.data;
   const allowance = allowanceQuery.data;
 
-  // Fill detection: remember the last observed request per address AND product,
-  // and fire onFilled on an open→zero transition (see the function comment).
-  // The callback lives in a ref so a new identity each render doesn't re-run
-  // the effect.
+  // Fill detection: remember the last read of this queue, tagged with the queue
+  // and the wallet it was read for, and announce a fill when the read that
+  // follows it is one. The callback lives in a ref so a new identity each
+  // render doesn't re-run the effect.
   //
-  // The product belongs in that memory as much as the address does. This hook
-  // follows the selected product, so switching hands it a different queue —
-  // and a depositor with an open 24h request who looks at the 30d product would
-  // otherwise be shown an open→zero transition that is nothing of the kind, and
-  // congratulated on a fill that never happened. A remembered request answers
-  // for the queue it was read from, or for nothing.
+  // The tags are what make the memory mean anything, and polling two queues is
+  // what makes them load-bearing rather than defensive. Each product's read
+  // carries its own wagmi cache key, so one queue's poll can never land in the
+  // other's memory; the tags close the remaining gaps, which are this instance
+  // being handed a different vault and the wallet changing under it. Neither is
+  // a fill, and both look exactly like one.
+  //
+  // What USED to be the sharp edge here is gone: this hook no longer follows
+  // the selected product, so switching products no longer hands it another
+  // product's queue mid-flight. Its memory is now only ever compared against
+  // more reads of the queue it was mounted for.
   const onFilledRef = useRef(onFilled);
   useEffect(() => {
     onFilledRef.current = onFilled;
   }, [onFilled]);
-  const lastSeen = useRef<{
-    vaultId: string;
-    addr: `0x${string}`;
-    offerAmount: bigint;
-    deadline: number;
-    inSolve: boolean;
-  } | null>(null);
+  const lastSeen = useRef<QueueSnapshot | null>(null);
   useEffect(() => {
     if (!address || raw === undefined) {
       if (!address) lastSeen.current = null;
       return;
     }
-    const prev = lastSeen.current;
-    if (
-      prev &&
-      prev.vaultId === vault.id &&
-      prev.addr === address &&
-      prev.offerAmount > 0n &&
-      raw.offerAmount === 0n &&
-      // The solver can only fill within the deadline; an expired struct going to
-      // zero would be an admin cleanup, not a payout — stay quiet on those. The
-      // grace covers a fill that landed just before a deadline we observe just
-      // after (we poll every 30s).
-      (prev.inSolve || nowSeconds() <= prev.deadline + 60)
-    ) {
-      onFilledRef.current?.();
-    }
-    lastSeen.current = {
+    const seen: QueueSnapshot = {
       vaultId: vault.id,
-      addr: address,
+      owner: address,
       offerAmount: raw.offerAmount,
       deadline: Number(raw.deadline),
       inSolve: raw.inSolve,
     };
+    if (isFillTransition(lastSeen.current, seen, nowSeconds())) {
+      onFilledRef.current?.();
+    }
+    lastSeen.current = seen;
   }, [vault.id, address, raw]);
   let request: WithdrawRequest | null = null;
   if (raw && raw.offerAmount > 0n) {

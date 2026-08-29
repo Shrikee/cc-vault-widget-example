@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 
 import { useEthersSigner } from "./lib/boringVault";
@@ -73,6 +73,16 @@ export function App() {
   } = readsById(products, selectedId);
 
   const pause = usePauseStatus(vault);
+
+  // The browser tab names the selected product, like the header, hero and
+  // footer do. A depositor comparing the two products has them open in two tabs
+  // and tells them apart by the strip at the top, and a support link that names
+  // a product opens a tab that agrees with it. index.html's static title is the
+  // pre-mount default and names both products, because until this runs the page
+  // has not resolved which one the URL asked for.
+  useEffect(() => {
+    document.title = `Coinchange ${vault.ui.name} — ${vault.ui.symbol}`;
+  }, [vault]);
 
   // After any successful write, refresh everything the user can see OF THE
   // PRODUCT IT HAPPENED IN. The other product's figures did not move, and

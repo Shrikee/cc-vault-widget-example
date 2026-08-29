@@ -86,20 +86,27 @@ function ProductPositionBlock({
   const sign = earningsUsd === null ? 0 : signAfterRounding(earningsUsd, 2);
   const tone = sign > 0 ? "up" : sign < 0 ? "down" : "flat";
 
+  // A wallet that holds none of this product gets no sub-line at all: its
+  // earnings are $0.00 against any average deposit cost, so the figure would
+  // say nothing about what it once earned. "skipped" is that same wallet caught
+  // BEFORE the scan rather than after — the deposit history behind a figure
+  // nobody would see is not read (src/lib/scanPlan.ts) — so the two cases read
+  // identically on screen, which is the point.
+  const nothingToEarnOn = shares === 0 || depositHistory.status === "skipped";
+
   // The sub-line under Position value. A wallet with no deposits in this
-  // product says so — the block's own heading names which product that is; a
-  // wallet that has since exited its whole position gets no sub-line, because
-  // the figure would be $0.00 regardless of what it once earned. The error
-  // line is doubled by the InlineError below — the reason belongs beside the
-  // figure and in the card's error slot (§6.2).
+  // product says so — the block's own heading names which product that is. The
+  // error line is doubled by the InlineError below — the reason belongs beside
+  // the figure and in the card's error slot (§6.2).
   const earningsHint: ReactNode =
     depositHistory.status === "none" ? (
       "Earnings — No deposits found for this wallet."
     ) : depositHistory.status === "error" ? (
       "Earnings — Couldn't load deposit history."
-    ) : depositHistory.status !== "ready" || earningsUsd === null ? (
+    ) : nothingToEarnOn ? undefined : depositHistory.status !== "ready" ||
+      earningsUsd === null ? (
       "…"
-    ) : shares === 0 ? undefined : (
+    ) : (
       <>
         <strong className={`earnings earnings--${tone}`}>
           {fmtSignedUsd(earningsUsd)}

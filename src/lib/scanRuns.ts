@@ -20,8 +20,8 @@
 //     that scan settles — succeeded or failed. A deposit that lands mid-scan
 //     must not go unseen.
 
-// A full scan reads the wallet's whole history from the Teller's deployment
-// block; a tail scan reads only what is new.
+// A full scan reads the wallet's whole history from the product's ledger floor
+// (src/lib/scanPlan.ts); a tail scan reads only what is new.
 export type ScanKind = "full" | "tail";
 
 // The key every rule below is keyed by: a wallet IN A PRODUCT, not a wallet.
@@ -47,7 +47,7 @@ export interface ScanRun {
   kind: ScanKind;
   // Whose history this run is reading — the caller's opaque wallet key.
   key: string;
-  // The block to resume from; null means "from the deployment block".
+  // The block to resume from; null means "from the ledger floor".
   from: bigint | null;
 }
 

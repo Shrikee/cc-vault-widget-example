@@ -71,15 +71,18 @@ export interface VaultUi {
   // anti-MEV deposit lock, NOT the vesting term.
   shareLockPeriod: number;
   // Deploy blocks, each confirmed by asserting code exists at that block and
-  // does not at the block before it. The share-price scan reads the
-  // accountant's logs and the deposit scan the teller's.
+  // does not at the block before it. `accountant` is where the share-price scan
+  // starts: no earlier, because that contract posted no share price before it
+  // existed (src/lib/scanPlan.ts).
   //
-  // `vault` is a deliberate deviation: the spec's registry sketch lists only
-  // the accountant and the teller, but the verified figures this registry was
-  // built from give all three, and so did the DEPLOY_BLOCKS constant it
-  // replaced. A prefactor should not quietly drop a verified value, so it is
-  // required here too — and nothing reads it. Drop it when something decides it
-  // is noise.
+  // `vault` and `teller` are deliberate deviations: the spec's registry sketch
+  // lists only the accountant and the teller, but the verified figures this
+  // registry was built from give all three, and so did the DEPLOY_BLOCKS
+  // constant it replaced. A prefactor should not quietly drop a verified value,
+  // so all three are required here — and no code path reads either of those
+  // two. The deposit scan used to start at `teller`; it starts at the ledger
+  // floor below instead, which is the authority's own number. Drop them when
+  // something decides they are noise.
   deployBlocks: { vault: number; accountant: number; teller: number };
   // The accountant's deploy BLOCK timestamp, unix seconds — the anchor for a
   // trailing window measured since launch. Read from the chain rather than from
@@ -96,8 +99,10 @@ export interface Vault {
   chain: ChainKey;
   addresses: VaultAddresses;
   // Ledger floor: the block the solver's holder ledger is built from, below
-  // which no event of this vault's matters. Provenance: the solver service —
-  // see the note in src/config/vaults.ts.
+  // which no event of this vault's matters. Where a wallet's deposit scan
+  // starts, which is safe because the vault's share totalSupply at floor − 1 is
+  // zero on both products (verified on chain), so no deposit predates it.
+  // Provenance: the solver service — see the note in src/config/vaults.ts.
   eventsFromBlock: number;
   // The product's vesting term, seconds — one day on the 24h line, thirty on
   // the 30d line. Carried and reviewable, but NOT read by any code path yet:

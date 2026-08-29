@@ -39,15 +39,11 @@ export function useProductReads(
   const metrics = useVaultMetrics(vault);
   const history = useShareHistory(vault, selected);
   const position = useUserPosition(vault, address);
-  // The wallet's share-unlock time is the deposit scan's precondition; when the
-  // position read failed there is none, and the sub-line says so rather than
-  // waiting forever.
-  const depositHistory = useDepositHistory(
-    vault,
-    address,
-    position.unlockAt,
-    position.error
-  );
+  // The position is the deposit scan's precondition AND its plan: a wallet
+  // holding none of this product has no earnings to compute, so nothing is
+  // scanned; and when the read failed there is no telling that case from a
+  // depositor's, so the sub-line says so rather than waiting forever.
+  const depositHistory = useDepositHistory(vault, address, position);
   const apys = useWindowApys(vault, history, metrics);
 
   return { vault, metrics, history, apys, position, depositHistory };

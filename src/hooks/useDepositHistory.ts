@@ -7,6 +7,7 @@ import { DEPOSIT_TOKENS } from "../config/tokens";
 import { TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED } from "../config/history";
 import { decodeDepositLog, reconstructDeposits, type DepositLog } from "../lib/apy";
 import { errorMessage, scanLogs } from "../lib/logScan";
+import { depositScanRange, planDepositScan } from "../lib/scanPlan";
 import type { Vault } from "../lib/vaultRegistry";
 import {
   NO_SCANS,
@@ -24,14 +25,17 @@ import {
 // A connected wallet's deposit history in ONE product — the average deposit
 // cost behind that product's earnings sub-line.
 //
-// Scanned ONCE per wallet per product, from that product's Teller deployment
-// block, filtered to the wallet: 44 chunks today, growing ~22 a month. Two
-// things keep that bearable.
-// A wallet whose share-unlock time is 0 has never deposited, so it needs no
-// scan at all; and the average deposit cost only ever changes when the wallet
-// itself deposits, so the only refresh is a one-chunk tail scan after its own
-// deposit succeeds. Fills, redemptions and transfers move the share balance,
-// never the average deposit cost, so they need no re-scan. Never polled.
+// Scanned ONCE per wallet per product, from that product's LEDGER FLOOR,
+// filtered to the wallet: 94 chunks on the 24h product today and 43 on the 30d
+// one, growing ~19 a month each. Three things keep that bearable.
+// A wallet that holds none of a product has no earnings to compute there, so
+// there is nothing to scan for — whether it never deposited or has since exited
+// the whole position (src/lib/scanPlan.ts decides which, because the two say
+// different things under the position value). And the average deposit cost only
+// ever changes when the wallet itself deposits, so the only refresh is a
+// one-chunk tail scan after its own deposit succeeds. Fills, redemptions and
+// transfers move the share balance, never the average deposit cost, so they
+// need no re-scan. Never polled.
 //
 // Which scan may run and which may commit is decided by src/lib/scanRuns.ts —
 // a pure reducer the vectors pin (a wallet switch overtaking a scan, a tail
@@ -41,7 +45,11 @@ import {
 // precondition and report its earnings here.
 
 export interface DepositHistoryState {
-  status: "idle" | "none" | "loading" | "ready" | "error";
+  // "none" is a wallet that never deposited into this product; "skipped" is one
+  // that holds none of it now. Both mean no scan was issued and neither is
+  // coming, and they are kept apart because the sub-line under the position
+  // value says something different about each (spec §6.4).
+  status: "idle" | "none" | "skipped" | "loading" | "ready" | "error";
   // Average deposit cost: base asset paid per CCUSD, across surviving deposits.
   avgCost?: number;
   deposited?: number;
@@ -102,16 +110,47 @@ function summarise(logs: DepositLog[], lastScannedBlock: bigint): DepositHistory
   };
 }
 
+// What the scan is planned from — the wallet's holding in THIS product. A
+// UserPosition is one; the hook takes only the three fields it plans with, so
+// the read it comes from is free to change around it.
+export interface DepositScanPosition {
+  // Shares held now. A wallet holding none has no earnings to compute here, so
+  // nothing is scanned. null while the read has not landed.
+  shares: number | null;
+  // Share-unlock time, unix seconds; 0 for a wallet that never deposited.
+  unlockAt: number | null;
+  // Why the position is unknown, when it is. It is the scan's precondition, and
+  // without it there is no telling a never-deposited wallet from a depositor —
+  // so the sub-line reports the failure instead of waiting on "…" for a value
+  // that is not coming (spec §6.4).
+  error: string | null;
+}
+
+// What no scan means on screen. Every one of these says "nothing is coming",
+// which is why they are settled here rather than left as a spinner: only
+// "unresolved" is still on its way.
+const NOT_SCANNED = {
+  // Still reading the position — including right after an address change, when
+  // the previous wallet's value must not be used (spec §5.5).
+  unresolved: { status: "idle" },
+  // shareUnlockTime === 0 ⇒ this wallet has never deposited ⇒ no scan at all,
+  // and the sub-line says so directly. Nothing to tail either: its first
+  // deposit turns the unlock time non-zero, which brings the effect back here
+  // for the full scan.
+  "never-deposited": { status: "none" },
+  // It deposited and has since exited the whole position. Its earnings are
+  // $0.00 whatever it paid, so the position card shows no sub-line and the
+  // teller history behind that figure is never read. A later deposit moves the
+  // balance off zero and brings the effect back here.
+  "no-shares": { status: "skipped" },
+} as const satisfies Record<string, DepositHistoryState>;
+
 export function useDepositHistory(
   vault: Vault,
   address?: string,
-  unlockAt?: number | null,
-  // Why the share-unlock time is unknown, when it is. That time is the scan's
-  // precondition, and without it there is no telling a never-deposited wallet
-  // from a depositor — so the sub-line reports the failure instead of waiting
-  // on "…" for a value that is not coming (spec §6.4).
-  unlockError?: string | null
+  position: DepositScanPosition = { shares: null, unlockAt: null, error: null }
 ): DepositHistory {
+  const { shares, unlockAt, error: positionError } = position;
   const client = usePublicClient({ chainId: CHAIN_ID });
   const [state, setState] = useState<DepositHistoryState>({ status: "idle" });
 
@@ -121,8 +160,8 @@ export function useDepositHistory(
   const runs = useRef<ScanRuns>(NO_SCANS);
   const logs = useRef<DepositLog[]>([]);
   // The wallet-in-product the precondition currently holds for — what a tail
-  // scans. null while there is nothing to scan (no wallet, or one that never
-  // deposited).
+  // scans. null while there is nothing to scan (no wallet, or one holding none
+  // of this product).
   const walletKey = useRef<string | null>(null);
 
   const forget = useCallback(() => {
@@ -138,13 +177,17 @@ export function useDepositHistory(
       if (!client || !address) return;
       (async () => {
         const latest = await client.getBlockNumber();
-        const from = scan.from ?? BigInt(vault.ui.deployBlocks.teller);
+        // A full run reads from this product's ledger floor, a tail from the
+        // cursor the reducer handed it.
+        const { from, to } = depositScanRange({
+          vault,
+          resumeFrom: scan.from,
+          head: latest,
+        });
         // A tail with nothing new to read: the chain has not moved past the
         // cursor since the last scan.
         const raw =
-          from > latest
-            ? []
-            : await scanWallet(client, vault, address, from, latest);
+          from > to ? [] : await scanWallet(client, vault, address, from, to);
         if (!isCurrent(runs.current, scan)) return; // overtaken — drop it
 
         const found = raw.map(decodeDepositLog);
@@ -152,7 +195,7 @@ export function useDepositHistory(
         // sums are recomputed over the whole set, and a nonce already counted
         // is not counted twice.
         const folded = scan.kind === "full" ? found : [...logs.current, ...found];
-        const cursor = from > latest ? (runs.current.cursor ?? latest) : latest;
+        const cursor = from > to ? (runs.current.cursor ?? to) : to;
         const next = summarise(folded, cursor);
 
         logs.current = folded;
@@ -178,32 +221,28 @@ export function useDepositHistory(
   );
 
   useEffect(() => {
-    // Precondition: a connected wallet and a resolved share-unlock time.
+    // Precondition: a connected wallet and a resolved position to plan from.
     if (!client || !address) {
       forget();
       setState({ status: "idle" });
       return;
     }
-    if (unlockError) {
+    if (positionError) {
       forget();
-      setState({ status: "error", error: unlockError });
-      return;
-    }
-    if (unlockAt === null || unlockAt === undefined) {
-      // Still reading it — including right after an address change, when the
-      // previous wallet's value must not be used (spec §5.5).
-      forget();
-      setState({ status: "idle" });
+      setState({ status: "error", error: positionError });
       return;
     }
 
-    // shareUnlockTime === 0 ⇒ this wallet has never deposited ⇒ no scan at all,
-    // and the sub-line says so directly. Nothing to tail either: its first
-    // deposit turns the unlock time non-zero, which brings the effect back here
-    // for the full scan.
-    if (unlockAt === 0) {
+    // Whether this wallet's history in this product is worth reading at all is
+    // src/lib/scanPlan.ts's decision, and the skip belongs HERE, inside the
+    // scan: the roster is read in full on every render (useProductReads), and
+    // filtering it to the products a wallet holds would change how many hooks
+    // run between renders. What the balance decides is whether requests are
+    // issued, never how many hooks there are.
+    const plan = planDepositScan({ shares, unlockAt });
+    if (plan !== "scan") {
       forget();
-      setState({ status: "none" });
+      setState(NOT_SCANNED[plan]);
       return;
     }
 
@@ -222,7 +261,7 @@ export function useDepositHistory(
     logs.current = [];
     setState({ status: "loading" });
     runScan(step.run);
-  }, [client, address, unlockAt, unlockError, forget, runScan]);
+  }, [client, address, shares, unlockAt, positionError, forget, runScan]);
 
   const refetchTail = useCallback(() => {
     const key = walletKey.current;

@@ -3,11 +3,11 @@ import { useAccount } from "wagmi";
 
 import { useEthersSigner } from "./lib/boringVault";
 import { readsById, useRosterReads } from "./hooks/useProductReads";
-import { useWithdrawRequest } from "./hooks/useWithdrawRequest";
 import { usePauseStatus } from "./hooks/usePauseStatus";
 import { useVaultSelection } from "./hooks/useVaultSelection";
 import { CHAIN_ID, CHAIN_LABEL } from "./config/chain";
 import { DEFAULT_VAULT_ID, ROSTER } from "./config/vaults";
+import type { Vault } from "./lib/vaultRegistry";
 import { VaultWriteProvider } from "./providers";
 
 import { Header } from "./components/Header";
@@ -16,6 +16,7 @@ import { PauseBanner } from "./components/PauseBanner";
 import { useToast } from "./components/Toaster";
 import { VaultStats } from "./components/VaultStats";
 import { PositionCard } from "./components/PositionCard";
+import { RedemptionsCard } from "./components/RedemptionsCard";
 import { HowItWorks } from "./components/HowItWorks";
 import { DepositPanel } from "./components/DepositPanel";
 import { WithdrawPanel } from "./components/WithdrawPanel";
@@ -28,7 +29,7 @@ export function App() {
   // The product on show, as the URL says it. Everything below divides in two
   // along that line: what belongs to the selected product — the panels, the
   // stats, the pause banner, the hero, the explainer — and what covers both,
-  // which is the chips and the side rail's positions.
+  // which is the chips and the side rail's positions and open redemptions.
   const { selectedId, select } = useVaultSelection(ROSTER, DEFAULT_VAULT_ID);
 
   const { address, isConnected, chainId } = useAccount();
@@ -37,29 +38,41 @@ export function App() {
 
   const [tab, setTab] = useState<Tab>("deposit");
 
-  // Every product is read, whichever one is selected: both chips carry their
-  // own headline APY and the side rail shows a position in each, so a figure
-  // that only existed for the selected product would be a blank card for the
-  // one the depositor is not looking at.
-  const products = useRosterReads(ROSTER, selectedId, address);
-  const { vault, metrics, history, apys, position, depositHistory } = readsById(
-    products,
-    selectedId
-  );
-
-  const pause = usePauseStatus(vault);
   const { show } = useToast();
 
   // Celebrate a solver fill (guide §9 FILLED): the request vanishing from the
   // queue means the USDT already landed in the user's wallet.
-  const onFilled = useCallback(() => {
-    show("Redemption filled — USDT has been sent to your wallet", "success");
-    metrics.refetch();
-    position.refetch();
-  }, [show, metrics, position]);
-  // The selected product's queue only. Watching both, and naming the product a
-  // fill came from, is the redemptions card's job in a later change.
-  const withdrawRequest = useWithdrawRequest(vault, address, onFilled);
+  //
+  // It names the product it came from, because both queues are polled and this
+  // fires for whichever one filled — including the product not on screen, which
+  // is the case that most needs saying. What the fill moved is refetched by that
+  // product's own reads; this is only the telling.
+  const onFilled = useCallback(
+    (filled: Vault) => {
+      show(
+        `${filled.ui.name} redemption filled — USDT has been sent to your wallet`,
+        "success"
+      );
+    },
+    [show]
+  );
+
+  // Every product is read, whichever one is selected: both chips carry their
+  // own headline APY, the side rail shows a position in each and lists open
+  // requests from both queues, so a figure that only existed for the selected
+  // product would be a blank card for the one the depositor is not looking at.
+  const products = useRosterReads(ROSTER, selectedId, address, onFilled);
+  const {
+    vault,
+    metrics,
+    history,
+    apys,
+    position,
+    depositHistory,
+    withdrawRequest,
+  } = readsById(products, selectedId);
+
+  const pause = usePauseStatus(vault);
 
   // After any successful write, refresh everything the user can see OF THE
   // PRODUCT IT HAPPENED IN. The other product's figures did not move, and
@@ -170,8 +183,19 @@ export function App() {
               lastSharePriceUpdateAt={pause.lastSharePriceUpdateAt}
             />
             {/* Both products, always: money in the one not being looked at is
-                never invisible. */}
+                never invisible. That holds twice over for a redemption in
+                flight, which is money that has left the wallet and not yet
+                arrived — hence the second card, outside the selection and
+                outside the tabs. */}
             <PositionCard connected={isConnected} products={products} />
+            <RedemptionsCard
+              connected={isConnected}
+              products={products}
+              selectedId={selectedId}
+              onSelect={select}
+              signer={signer}
+              rightChain={rightChain}
+            />
             <HowItWorks vault={vault} />
           </aside>
         </div>

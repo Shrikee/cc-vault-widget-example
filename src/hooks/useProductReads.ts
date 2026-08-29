@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import type { Address } from "viem";
 
 import type { Vault, VaultRoster } from "../lib/vaultRegistry";
@@ -5,6 +6,10 @@ import { useDepositHistory, type DepositHistory } from "./useDepositHistory";
 import { useShareHistory, type ShareHistory } from "./useShareHistory";
 import { useUserPosition, type UserPosition } from "./useUserPosition";
 import { useVaultMetrics, type VaultMetrics } from "./useVaultMetrics";
+import {
+  useWithdrawRequest,
+  type WithdrawRequestState,
+} from "./useWithdrawRequest";
 import { useWindowApys, type WindowApys } from "./useWindowApys";
 
 // Everything the widget reads about ONE product, for the connected wallet.
@@ -25,6 +30,10 @@ export interface ProductReads {
   apys: WindowApys;
   position: UserPosition;
   depositHistory: DepositHistory;
+  // This product's open request in ITS OWN AtomicQueue. Every product's queue
+  // is polled, not just the selected one's: the side rail lists open requests
+  // across both, and a fill is announced whichever product filled.
+  withdrawRequest: WithdrawRequestState;
 }
 
 export function useProductReads(
@@ -34,7 +43,12 @@ export function useProductReads(
   // offers every trailing window, the other one contributes a single headline
   // APY to a chip and scans that window alone (spec, "RPC budget").
   selected: boolean,
-  address?: Address
+  address?: Address,
+  // Told when THIS product's redemption request is filled, and given the vault
+  // so it can say which product it was. What a fill moves on screen is refetched
+  // below without asking; this is for what only the caller can do — telling the
+  // depositor, from wherever the toaster lives.
+  onFilled?: (vault: Vault) => void
 ): ProductReads {
   const metrics = useVaultMetrics(vault);
   const history = useShareHistory(vault, selected);
@@ -46,7 +60,29 @@ export function useProductReads(
   const depositHistory = useDepositHistory(vault, address, position);
   const apys = useWindowApys(vault, history, metrics);
 
-  return { vault, metrics, history, apys, position, depositHistory };
+  // A fill has already happened by the time it is observed — the solver zeroes
+  // the request and sends the USDT in one transaction, with no claim step — so
+  // this refetches the two figures it moved: the shares have left the wallet and
+  // the vault has paid out for them. This product's, and no other product's:
+  // nothing moved in the one that did not fill.
+  const refetchMetrics = metrics.refetch;
+  const refetchPosition = position.refetch;
+  const onProductFilled = useCallback(() => {
+    refetchMetrics();
+    refetchPosition();
+    onFilled?.(vault);
+  }, [refetchMetrics, refetchPosition, onFilled, vault]);
+  const withdrawRequest = useWithdrawRequest(vault, address, onProductFilled);
+
+  return {
+    vault,
+    metrics,
+    history,
+    apys,
+    position,
+    depositHistory,
+    withdrawRequest,
+  };
 }
 
 // One bundle per product, in the registry's order.
@@ -63,13 +99,14 @@ export function useProductReads(
 export function useRosterReads(
   roster: VaultRoster,
   selectedId: string,
-  address?: Address
+  address?: Address,
+  onFilled?: (vault: Vault) => void
 ): ProductReads[] {
   return roster.vaults.map((vault) =>
     // The selection is passed DOWN to each product rather than used to pick
     // which products to read: it changes how much each scan asks for, never how
     // many hooks run.
-    useProductReads(vault, vault.id === selectedId, address)
+    useProductReads(vault, vault.id === selectedId, address, onFilled)
   );
 }
 

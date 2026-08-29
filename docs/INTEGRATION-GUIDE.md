@@ -429,7 +429,7 @@ There is no user-callable cancel on this deployment:
 - `safeUpdateAtomicRequest` explicitly reverts on `offerAmount == 0` (`AtomicQueue__SafeRequestOfferAmountZero`), so it cannot zero a request either.
 - The library's `withdrawQueueCancel` therefore reverts for end users.
 
-The supported pattern — what this repo's **Stop request** button does (`src/components/WithdrawPanel.tsx`): **revoke the share approval** — `vault.approve(queue, 0)`. The solver skips any request whose approval no longer covers it (it cannot pull the shares); the request then sits inert until its deadline lapses, after which it drops out entirely. The request struct remains visible on-chain until then — your UI should render "stopped" (allowance < offerAmount) rather than "open". Re-approving (or posting a fresh request, which re-prompts approval) re-activates it.
+The supported pattern — what this repo's **Stop request** button does (`src/components/RedemptionsCard.tsx`): **revoke the share approval** — `vault.approve(queue, 0)`. The solver skips any request whose approval no longer covers it (it cannot pull the shares); the request then sits inert until its deadline lapses, after which it drops out entirely. The request struct remains visible on-chain until then — your UI should render "stopped" (allowance < offerAmount) rather than "open". Re-approving (or posting a fresh request, which re-prompts approval) re-activates it.
 
 ### 7.5 No claim step
 

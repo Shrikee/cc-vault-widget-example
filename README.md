@@ -226,16 +226,19 @@ nothing outside those two panels depends on the library's context.
 - `src/hooks/*` — `useProductReads` (everything the widget reads about one
   product, assembled once per product), `useVaultSelection` (the URL side of the
   selection, holding no rules), `useVaultMetrics`, `useUserPosition`,
-  `useWithdrawRequest` (on-chain AtomicQueue read), `useShareHistory` (the
+  `useWithdrawRequest` (one product's AtomicQueue, read on chain and polled —
+  one instance per product, so both queues are watched), `useShareHistory` (the
   share-price scan behind one product's APYs), `useWindowApys`,
   `useDepositHistory` (a wallet's average deposit cost in one product),
   `usePauseStatus`, `useTokenBalance`, `useStatusToasts`, `useNow`.
 - `src/components/*` — custom UI, every vault-scoped one taking its vault as a
   prop: `VaultSwitcher` (the chips), `PositionCard` (both products),
-  `VestingNotice` (the 30d disclosure), and the rest.
+  `RedemptionsCard` (open requests in both queues, outside the selection and the
+  tabs), `VestingNotice` (the 30d disclosure), and the rest.
 - `src/lib/*.test.ts` — the vectors, driving the real modules: the APY,
   earnings and projection derivations, the scan bookkeeping, the registry parse,
-  the Lens reads, the selection resolution and the shared budget.
+  the Lens reads, the selection resolution, the shared budget, and what a
+  vanished queue request does and does not mean.
 
 ---
 

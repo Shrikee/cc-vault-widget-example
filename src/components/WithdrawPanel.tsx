@@ -1,13 +1,12 @@
 import { useState } from "react";
-import { Contract, type JsonRpcSigner } from "ethers";
+import { type JsonRpcSigner } from "ethers";
 import { ConnectKitButton } from "connectkit";
 
 import { useBoringVaultV1 } from "../lib/boringVault";
 import { useStatusToasts } from "../hooks/useStatusToasts";
-import { useToast } from "./Toaster";
 import { useNow } from "../hooks/useNow";
 import type { WithdrawRequest } from "../hooks/useWithdrawRequest";
-import { explorerAddress, explorerTx } from "../config/chain";
+import { explorerAddress } from "../config/chain";
 import {
   WITHDRAW_DISCOUNT_PCT_DEFAULT,
   WITHDRAW_DISCOUNT_PCT_MAX,
@@ -18,13 +17,11 @@ import type { Vault } from "../lib/vaultRegistry";
 import { formatAmount, parseAmount, shortAddress } from "../lib/format";
 import { AmountInput } from "./AmountInput";
 import { Modal } from "./Modal";
-import { RequestRow } from "./RequestRow";
 import { VestingNotice } from "./VestingNotice";
 import { Button, InlineError } from "./ui";
 
 const MAX_VALID_DAYS = 90;
 const wantSymbol = WITHDRAW_TOKEN.displayName ?? "USDT";
-const ERC20_APPROVE_ABI = ["function approve(address spender, uint256 amount) returns (bool)"];
 
 export function WithdrawPanel({
   vault,
@@ -49,13 +46,16 @@ export function WithdrawPanel({
   unlockAt: number | null;
   rightChain: boolean;
   paused: boolean;
+  // This product's open request, if there is one. The panel no longer RENDERS
+  // it — that moved to the side rail's redemptions card, where a request is
+  // visible from either product and either tab (spec, "Redemptions") — but it
+  // still has to say that submitting another one replaces it.
   request: WithdrawRequest | null;
   refetchRequest: () => void;
   onSuccess: () => void;
 }) {
   const { isBoringV1ContextReady, queueWithdraw, withdrawStatus } =
     useBoringVaultV1();
-  const { show, dismiss } = useToast();
   const now = useNow();
 
   const shareSymbol = vault.ui.symbol;
@@ -65,11 +65,11 @@ export function WithdrawPanel({
   const [discount, setDiscount] = useState(""); // "" => default spread
   const [validDays, setValidDays] = useState(""); // "" => default validity
   const [confirm, setConfirm] = useState(false);
-  const [stopping, setStopping] = useState(false);
 
-  const busy = withdrawStatus.loading || stopping;
-  // queueWithdraw is the only action that drives withdrawStatus (the Stop action
-  // manages its own toasts), so a constant active=true is safe here.
+  const busy = withdrawStatus.loading;
+  // queueWithdraw is now the only action this panel takes at all — stopping a
+  // request went to the redemptions card with the row it belongs to — so it is
+  // the only thing driving withdrawStatus and a constant active=true is safe.
   useStatusToasts(withdrawStatus, true, {
     loading: "Submitting redemption request…",
     success: "Redemption request submitted",
@@ -134,33 +134,6 @@ export function WithdrawPanel({
     setAmount("");
     refetchRequest();
     onSuccess();
-  }
-
-  // Stop a pending request from being filled. The raw cancel (zeroing the
-  // request) is admin-gated on this vault, so we revoke the share approval to the
-  // queue — the solver then can't pull the shares and skips the request, which
-  // clears on its own at its deadline.
-  async function runStop() {
-    if (!signer) return;
-    setStopping(true);
-    const tid = show("Revoking approval…", "loading");
-    try {
-      const share = new Contract(vault.addresses.vault, ERC20_APPROVE_ABI, signer);
-      const tx = await share.approve(vault.addresses.queue, 0n);
-      const receipt = await tx.wait();
-      dismiss(tid);
-      show("Approval revoked — your request can no longer be filled", "success", {
-        href: receipt?.hash ? explorerTx(receipt.hash) : undefined,
-        hrefLabel: "View transaction",
-      });
-      refetchRequest();
-      onSuccess();
-    } catch (e) {
-      dismiss(tid);
-      show((e as Error)?.message ?? "Failed to revoke approval", "error");
-    } finally {
-      setStopping(false);
-    }
   }
 
   const effectiveSpread = discount.trim()
@@ -251,7 +224,8 @@ export function WithdrawPanel({
 
       {!!request && !locked && (
         <div className="notice notice--info">
-          You already have an open request below. Submitting a new request{" "}
+          You already have an open request, shown under{" "}
+          <strong>Open redemptions</strong>. Submitting a new request{" "}
           <strong>replaces</strong> it. A posted request can't be cancelled
           on-chain — use <strong>Stop request</strong> (revokes the share
           approval) to prevent it being filled, or let it expire.
@@ -287,21 +261,6 @@ export function WithdrawPanel({
           Request redemption
         </Button>
       )}
-
-      {/* ---- open request ---- */}
-      <div className="requests">
-        <h3 className="requests__title">Your request</h3>
-        {!request ? (
-          <p className="muted small">No open redemption request.</p>
-        ) : (
-          <RequestRow
-            vault={vault}
-            request={request}
-            busy={busy}
-            onStop={runStop}
-          />
-        )}
-      </div>
 
       <Modal
         open={confirm}

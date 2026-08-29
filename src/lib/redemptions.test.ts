@@ -20,8 +20,11 @@ import {
 } from "./redemptions";
 
 const NOW = 1_800_000_000;
-const WALLET = "0x2fe1a1b3c4d5e6f708192a3b4c5d6e7f8091575d";
-const OTHER_WALLET = "0x46360000000000000000000000000000000030f9";
+// The two wallets the other vectors in this repository are anchored to; here
+// they are only two distinct owners, and nothing is claimed about what either
+// holds.
+const WALLET = "0x463639c13d578dd17e8164d83ab7fc6135d130f9";
+const OTHER_WALLET = "0xb4b0a5b761133860a39d2e89d59a8c6f6769cbe0";
 
 // An open request in the 24h queue, well inside its deadline.
 const OPEN: QueueSnapshot = {

@@ -1,5 +1,6 @@
 import type { Hex, PublicClient } from "viem";
-import { LOG_CHUNK_SPAN } from "../config/history";
+import { LOG_CHUNK_SPAN, historyChunksInFlight } from "../config/history";
+import { createInFlightBudget, mapWithBudget } from "./inFlightBudget";
 
 // Chunked eth_getLogs scan — the one read the yield figures are built on.
 //
@@ -7,6 +8,10 @@ import { LOG_CHUNK_SPAN } from "../config/history";
 // series of chunk requests run a few at a time. Any chunk failing fails the
 // whole scan: a partial series would silently understate the share-price
 // history (or a wallet's deposits), so there is no retry and no partial data.
+//
+// "A few at a time" is a budget for the whole app, not for a scan — see
+// ./inFlightBudget.ts. With two products a cold load runs up to four scans at
+// once, and a per-scan limit would multiply them into a rate-limit failure.
 
 export interface RawLog {
   address: Hex;
@@ -25,8 +30,12 @@ export interface ScanLogsParams {
   topics: LogTopic[];
   fromBlock: bigint;
   toBlock: bigint;
-  chunksInFlight: number;
 }
+
+// The app's one budget, sized once at load. The size is a property of the
+// endpoint rather than of any caller, so no caller passes it: a scan asks for
+// its chunks and waits its turn like every other scan.
+const CHUNK_BUDGET = createInFlightBudget(historyChunksInFlight());
 
 const toHex = (n: bigint): Hex => `0x${n.toString(16)}`;
 
@@ -39,25 +48,6 @@ function chunkRanges(fromBlock: bigint, toBlock: bigint): [bigint, bigint][] {
     ranges.push([start, end > toBlock ? toBlock : end]);
   }
   return ranges;
-}
-
-// Run `fn` over `items` with at most `limit` promises in flight, preserving
-// order. The first rejection rejects the whole run (no retry, no backoff).
-async function mapWithLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  const worker = async () => {
-    for (let i = next++; i < items.length; i = next++) {
-      results[i] = await fn(items[i]);
-    }
-  };
-  const workers = Math.max(1, Math.min(limit, items.length));
-  await Promise.all(Array.from({ length: workers }, worker));
-  return results;
 }
 
 // The i-th 32-byte word of a log's `data`, as the uint it encodes. Both event
@@ -86,14 +76,13 @@ export async function scanLogs({
   topics,
   fromBlock,
   toBlock,
-  chunksInFlight,
 }: ScanLogsParams): Promise<RawLog[]> {
   const ranges = chunkRanges(fromBlock, toBlock);
 
   // Raw eth_getLogs rather than viem's getLogs: the topic filter is passed
   // through verbatim, which is what a filter like "either of these two events,
   // this wallet in topics[2]" needs (spec §5.1).
-  const chunks = await mapWithLimit(ranges, chunksInFlight, ([from, to]) =>
+  const chunks = await mapWithBudget(ranges, CHUNK_BUDGET, ([from, to]) =>
     client.request({
       method: "eth_getLogs",
       params: [{ address, topics, fromBlock: toHex(from), toBlock: toHex(to) }],

@@ -51,17 +51,23 @@ export const TOPIC_DEPOSIT =
 export const TOPIC_DEPOSIT_REFUNDED =
   "0xaf98ea774275cadfa3e477a7b52cba03e01197445a76bd5d0d561608708c3624";
 
-// How many eth_getLogs chunk requests a scan keeps in flight. 4 is measured
-// safe against QuickNode's 50 req/s limit; 8 trips it (code -32007). On Polygon
-// a full 30-day span is ~173 chunks, so a cold scan takes a few seconds.
+// How many eth_getLogs chunk requests the widget keeps in flight AT ONCE,
+// across every scan it is running. 4 is measured safe against QuickNode's
+// 50 req/s limit; 8 trips it (code -32007). On Polygon a full 30-day span is
+// ~173 chunks, so a cold scan takes a few seconds.
+//
+// Global rather than per scan, and that is the whole point of the number: with
+// two products a cold load runs up to four scans at once, and four scans of
+// four would be sixteen concurrent requests — twice what already trips the
+// limiter. src/lib/inFlightBudget.ts is where the sharing happens.
 export const DEFAULT_CHUNKS_IN_FLIGHT = 4;
 
 // Read inside a function rather than at module scope. That began as a hard
 // constraint: src/lib/apy.ts imports the constants above, and the vectors drove
 // it under plain Node, where `import.meta.env` does not exist. The vectors run
 // under Vitest now, which serves them through Vite's pipeline, so the
-// constraint is gone — the function stays because nothing needs the value
-// frozen at module load and it keeps the fallback in one place.
+// constraint is gone — the function stays because it keeps the fallback in one
+// place. Its one caller now asks once, when it builds the shared budget.
 export function historyChunksInFlight(): number {
   const parsed = Number(import.meta.env.VITE_HISTORY_CHUNKS_IN_FLIGHT);
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_CHUNKS_IN_FLIGHT;

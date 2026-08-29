@@ -4,11 +4,7 @@ import { usePublicClient } from "wagmi";
 
 import { CHAIN_ID } from "../config/chain";
 import { DEPOSIT_TOKENS } from "../config/tokens";
-import {
-  TOPIC_DEPOSIT,
-  TOPIC_DEPOSIT_REFUNDED,
-  historyChunksInFlight,
-} from "../config/history";
+import { TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED } from "../config/history";
 import { decodeDepositLog, reconstructDeposits, type DepositLog } from "../lib/apy";
 import { errorMessage, scanLogs } from "../lib/logScan";
 import type { Vault } from "../lib/vaultRegistry";
@@ -85,7 +81,6 @@ function scanWallet(
     topics: [[TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED], null, pad32(wallet)],
     fromBlock,
     toBlock,
-    chunksInFlight: historyChunksInFlight(),
   });
 }
 

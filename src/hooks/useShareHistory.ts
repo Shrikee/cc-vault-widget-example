@@ -2,11 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePublicClient } from "wagmi";
 
 import { CHAIN_ID } from "../config/chain";
-import {
-  BLOCKS_30D,
-  TOPIC_EXCHANGE_RATE_UPDATED,
-  historyChunksInFlight,
-} from "../config/history";
+import { BLOCKS_30D, TOPIC_EXCHANGE_RATE_UPDATED } from "../config/history";
 import { errorMessage, scanLogs } from "../lib/logScan";
 import { decodeSharePriceUpdate, type SharePriceUpdate } from "../lib/apy";
 import type { Vault } from "../lib/vaultRegistry";
@@ -41,7 +37,6 @@ export function useShareHistory(vault: Vault): ShareHistory {
     // mount from scanning again in development.
     const scanning = vault.id;
     scanned.current = scanning;
-    const chunksInFlight = historyChunksInFlight();
     setHistory({ status: "loading", events: [] });
 
     (async () => {
@@ -56,7 +51,6 @@ export function useShareHistory(vault: Vault): ShareHistory {
         topics: [TOPIC_EXCHANGE_RATE_UPDATED],
         fromBlock: from,
         toBlock: latest,
-        chunksInFlight,
       });
       // A scan the selected product moved on from answers for a vault nobody
       // is looking at any more.

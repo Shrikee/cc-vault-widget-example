@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useAccount } from "wagmi";
 
-import { useBoringVaultV1, useEthersSigner } from "./lib/boringVault";
+import { useEthersSigner } from "./lib/boringVault";
 import { useVaultMetrics } from "./hooks/useVaultMetrics";
 import { useShareHistory } from "./hooks/useShareHistory";
 import { useUserPosition } from "./hooks/useUserPosition";
@@ -12,6 +12,7 @@ import { useWindowApys } from "./hooks/useWindowApys";
 import { CHAIN_ID, CHAIN_LABEL, SHARE_SYMBOL, VAULT_NAME } from "./config/vault";
 import { DEFAULT_VAULT_ID, ROSTER } from "./config/vaults";
 import { vaultById } from "./lib/vaultRegistry";
+import { VaultWriteProvider } from "./providers";
 
 import { Header } from "./components/Header";
 import { NetworkBanner } from "./components/NetworkBanner";
@@ -33,7 +34,6 @@ export function App() {
   const selectedId = DEFAULT_VAULT_ID;
   const vault = vaultById(ROSTER, selectedId);
 
-  const { isBoringV1ContextReady } = useBoringVaultV1();
   const { address, isConnected, chainId } = useAccount();
   const signer = useEthersSigner({ chainId: CHAIN_ID });
   const rightChain = chainId === CHAIN_ID;
@@ -94,33 +94,31 @@ export function App() {
           </p>
         </div>
 
-        {!isBoringV1ContextReady ? (
-          <Card>
-            <p className="muted">Connecting to vault contracts…</p>
-          </Card>
-        ) : (
-          <div className="layout">
-            <div className="layout__main">
-              <Card>
-                <div className="tabs" role="tablist">
-                  <button
-                    role="tab"
-                    aria-selected={tab === "deposit"}
-                    className={`tab ${tab === "deposit" ? "tab--active" : ""}`}
-                    onClick={() => setTab("deposit")}
-                  >
-                    Deposit
-                  </button>
-                  <button
-                    role="tab"
-                    aria-selected={tab === "withdraw"}
-                    className={`tab ${tab === "withdraw" ? "tab--active" : ""}`}
-                    onClick={() => setTab("withdraw")}
-                  >
-                    Withdraw
-                  </button>
-                </div>
+        <div className="layout">
+          <div className="layout__main">
+            <Card>
+              <div className="tabs" role="tablist">
+                <button
+                  role="tab"
+                  aria-selected={tab === "deposit"}
+                  className={`tab ${tab === "deposit" ? "tab--active" : ""}`}
+                  onClick={() => setTab("deposit")}
+                >
+                  Deposit
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={tab === "withdraw"}
+                  className={`tab ${tab === "withdraw" ? "tab--active" : ""}`}
+                  onClick={() => setTab("withdraw")}
+                >
+                  Withdraw
+                </button>
+              </div>
 
+              {/* The library's context wraps the write paths and nothing else.
+                  Everything outside it reads the chain directly, per vault. */}
+              <VaultWriteProvider vault={vault}>
                 {tab === "deposit" ? (
                   <DepositPanel
                     signer={signer}
@@ -146,27 +144,27 @@ export function App() {
                     onSuccess={refreshAll}
                   />
                 )}
-              </Card>
-            </div>
-
-            <aside className="layout__side">
-              <VaultStats
-                metrics={metrics}
-                history={history}
-                windows={apys.windows}
-                lastSharePriceUpdateAt={pause.lastSharePriceUpdateAt}
-              />
-              <PositionCard
-                connected={isConnected}
-                shares={position.shares}
-                shareValue={metrics.shareValue}
-                unlockAt={position.unlockAt}
-                depositHistory={depositHistory}
-              />
-              <HowItWorks />
-            </aside>
+              </VaultWriteProvider>
+            </Card>
           </div>
-        )}
+
+          <aside className="layout__side">
+            <VaultStats
+              metrics={metrics}
+              history={history}
+              windows={apys.windows}
+              lastSharePriceUpdateAt={pause.lastSharePriceUpdateAt}
+            />
+            <PositionCard
+              connected={isConnected}
+              shares={position.shares}
+              shareValue={metrics.shareValue}
+              unlockAt={position.unlockAt}
+              depositHistory={depositHistory}
+            />
+            <HowItWorks />
+          </aside>
+        </div>
 
         <footer className="site-footer">
           <span>

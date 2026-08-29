@@ -7,10 +7,11 @@ import { Card } from "./ui";
 //
 // The timeline is not the same on both products, which is why it is told per
 // product rather than once. The share lock is one day on each, but the 30d
-// product's shares keep vesting for thirty days after that, and a redemption
-// in between is priced against what the holder paid rather than against the
-// share price — a step of its own on that product, and absent on the 24h one
-// where the lock and the vesting term are the same day.
+// product's shares keep vesting for thirty days after that, and a holder
+// redeeming in between is entitled to no more than what they paid — a cap and
+// not a floor, so a share price that has fallen below their cost is what they
+// get. A step of its own on that product, and absent on the 24h one where the
+// lock and the vesting term are the same day.
 export function HowItWorks({ vault }: { vault: Vault }) {
   const symbol = vault.ui.symbol;
   const vests = hasVestingGap(vault);
@@ -33,7 +34,7 @@ export function HowItWorks({ vault }: { vault: Vault }) {
       ? [
           {
             title: `${term}-day vesting`,
-            body: `This product's shares vest over ${term} days — separately from the 1-day lock. Redeem before they vest and the solver prices your shares at what you paid, so the request needs a wider redemption spread to be filled.`,
+            body: `This product's shares vest over ${term} days — separately from the 1-day lock. Redeem before they vest and you are entitled to no more than what you paid — a cap, not a floor, so a share price below what you paid is what you get — and the request may need a wider redemption spread to be filled.`,
           },
         ]
       : []),

@@ -5,28 +5,40 @@ import { hasVestingGap, vestingDays, type Vault } from "../lib/vaultRegistry";
 // The two products share an identical share lock of one day, but the redemption
 // solver prices a holder's shares against a VESTING TERM that differs by
 // product: one day on the 24h line, thirty on the 30d line. So on the 30d
-// product a depositor can redeem long before they have vested, and a holder
-// who exits early is entitled to what they paid rather than to the share price
-// on screen. The solver can only refuse a request, never fill it at a lower
-// price, so a request asking for more than the holder's entitlement is not
-// rejected with an error — it simply sits open until its deadline lapses,
-// which is mystifying unless the widget has said this in advance.
+// product a depositor can redeem long before they have vested, and an unvested
+// holder is entitled to no more than what they paid — a CAP, and not a floor.
+// The solver prices such a lot at the lower of what the holder paid and the
+// share price, so a fallen share price is what they get; what they paid is
+// never a refund. Saying "priced at what you paid" would be true only while the
+// share price is up, which it is today and need not stay.
+//
+// The solver can only refuse a request, never fill it at a lower price, so a
+// request asking for more than the holder's entitlement is not rejected with an
+// error — it simply sits open until its deadline lapses, which is mystifying
+// unless the widget has said this in advance.
 //
 // The remedy the depositor has, and the one this widget can offer today, is the
 // redemption spread it already exposes: a wider spread asks for less and can be
 // filled where the default cannot. Stage 2 gives the widget the solver's own
 // entitlement arithmetic so it can price an early exit unattended; until then
-// an early exit costs a support round-trip, and this copy is what makes that
-// round-trip explicable rather than a surprise.
+// an early exit costs a support round-trip.
+//
+// WHAT THIS NOTICE DOES NOT SAY, and why. Where to ask when a request stays
+// open moved to the request itself (src/lib/requestStatus.ts, rendered by
+// RequestRow). This notice is on the two panels because that is where the two
+// decisions it informs are taken — whether to enter, and what spread to leave
+// with — and both are taken before there is a request to ask about. Once there
+// is one, it is listed in the side rail's redemptions card, which is outside the
+// selection and outside the tabs: a 30d request that is not filling is normally
+// read from the deposit tab or from the other product, where neither of these
+// panels is on screen. So the forward-looking half is here, beside the spread
+// control that is the remedy, and the after-the-fact half is beside the request.
+// Neither is in three places.
 //
 // Nothing here prices anything. `vestingSeconds` is read for one purpose — to
 // say "30 days" in the depositor's own terms rather than hard-coding it beside
 // a registry that already knows — and for which products the notice applies to
 // at all. The arithmetic that uses it is stage 2's.
-//
-// One gap, stated rather than invented: this repository holds no support
-// address, so the copy names support without linking to it. Give it a link when
-// there is one to give.
 
 export function VestingNotice({
   vault,
@@ -54,13 +66,13 @@ export function VestingNotice({
         {where === "deposit"
           ? `Your ${vault.ui.symbol} shares unlock after ${lock} day and can be redeemed then, but they do not finish vesting for ${term} days.`
           : `Your ${vault.ui.symbol} shares unlock after ${lock} day, but they do not finish vesting for ${term} days.`}{" "}
-        Redeeming before they vest is priced at what you paid rather than at the
-        share price shown here, so a request may need a{" "}
-        <strong>wider redemption spread</strong> than the default to be filled.
-        The solver cannot fill a request for less than it asks — it passes over
-        it instead, and the request stays open until its deadline lapses. If
-        yours stays open, ask Coinchange support: the solver records a reason
-        for every request it passes over.
+        Redeem before they vest and you are entitled to no more than what you
+        paid — a cap, not a floor: if the share price has fallen below what you
+        paid, you get the share price, not your money back. So a request may
+        need a <strong>wider redemption spread</strong> than the default to be
+        filled. The solver cannot fill a request for less than it asks — it
+        passes over it instead, and the request stays open until its deadline
+        lapses.
       </span>
     </div>
   );

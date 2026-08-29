@@ -8,7 +8,8 @@
 // is told. No React, no network, no DOM.
 //
 // The rules (spec §5.5, §5.7):
-//   • One full scan per wallet key; a tail scan resumes from the cursor.
+//   • One full scan per key — a wallet in a product, see scanKey below; a tail
+//     scan resumes from the cursor.
 //   • Only the newest run for the current key may commit — a run overtaken by
 //     an address switch lands too late and is dropped, cursor and all.
 //   • A failed full scan leaves NOTHING scanned, so the next legitimate trigger
@@ -22,6 +23,22 @@
 // A full scan reads the wallet's whole history from the Teller's deployment
 // block; a tail scan reads only what is new.
 export type ScanKind = "full" | "tail";
+
+// The key every rule below is keyed by: a wallet IN A PRODUCT, not a wallet.
+//
+// The widget serves two products at once and a wallet has a separate deposit
+// history in each — its own deposits, its own average deposit cost, its own
+// earnings, denominated in a different share token at a different share price.
+// Keying on the wallet alone would let a scan of one product satisfy the
+// other's precondition, and the figure that comes out of that is not blank or
+// late: it is the wrong earnings, with nothing on screen looking amiss.
+//
+// The reducer treats the result as opaque, so what goes into it is decided
+// here: the vault's registry id and the wallet, lowercased because the same
+// address arrives spelled both ways.
+export function scanKey(vaultId: string, wallet: string): string {
+  return `${vaultId}:${wallet.toLowerCase()}`;
+}
 
 export interface ScanRun {
   // Monotonic: the newest run of all wins, which is what makes an overtaken

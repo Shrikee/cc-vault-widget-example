@@ -14,17 +14,18 @@ import {
   forgetScans,
   isCurrent,
   requestTail,
+  scanKey,
   settleScan,
   startScan,
   type ScanRun,
   type ScanRuns,
 } from "../lib/scanRuns";
 
-// A connected wallet's deposit history — the average deposit cost behind the
-// earnings sub-line.
+// A connected wallet's deposit history in ONE product — the average deposit
+// cost behind that product's earnings sub-line.
 //
-// Scanned ONCE per wallet, from the Teller's deployment block, filtered to the
-// wallet: 44 chunks today, growing ~22 a month. Two things keep that bearable.
+// Scanned ONCE per wallet per product, from that product's Teller deployment
+// block, filtered to the wallet: 44 chunks today, growing ~22 a month. Two things keep that bearable.
 // A wallet whose share-unlock time is 0 has never deposited, so it needs no
 // scan at all; and the average deposit cost only ever changes when the wallet
 // itself deposits, so the only refresh is a one-chunk tail scan after its own
@@ -34,7 +35,9 @@ import {
 // Which scan may run and which may commit is decided by src/lib/scanRuns.ts —
 // a pure reducer the vectors pin (a wallet switch overtaking a scan, a tail
 // asked for mid-scan, a failure that must stay recoverable). This hook holds
-// the network side and does what it says.
+// the network side and does what it says. Its key is the wallet IN THIS
+// PRODUCT, so the other product's scan can never satisfy this one's
+// precondition and report its earnings here.
 
 export interface DepositHistoryState {
   status: "idle" | "none" | "loading" | "ready" | "error";
@@ -116,8 +119,9 @@ export function useDepositHistory(
   // result is no longer wanted.
   const runs = useRef<ScanRuns>(NO_SCANS);
   const logs = useRef<DepositLog[]>([]);
-  // The wallet the precondition currently holds for — what a tail scans. null
-  // while there is nothing to scan (no wallet, or one that never deposited).
+  // The wallet-in-product the precondition currently holds for — what a tail
+  // scans. null while there is nothing to scan (no wallet, or one that never
+  // deposited).
   const walletKey = useRef<string | null>(null);
 
   const forget = useCallback(() => {
@@ -202,7 +206,11 @@ export function useDepositHistory(
       return;
     }
 
-    const key = address.toLowerCase();
+    // Keyed by the product as well as the wallet: this hook is mounted once per
+    // product, so the 24h scan's state must never answer for the 30d one — and
+    // a hook instance handed a different vault must scan again rather than
+    // report the other product's average deposit cost as this one's.
+    const key = scanKey(vault.id, address);
     walletKey.current = key;
     const step = startScan(runs.current, key);
     runs.current = step.runs;

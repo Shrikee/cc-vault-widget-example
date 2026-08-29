@@ -15,6 +15,7 @@ import {
   forgetScans,
   isCurrent,
   requestTail,
+  scanKey,
   settleScan,
   startScan,
   type ScanRun,
@@ -160,5 +161,58 @@ describe("losing the precondition (spec §5.5)", () => {
     expect(started(startScan(forgotten, KEY_A)).generation).toBeGreaterThan(
       started(inFlight).generation
     );
+  });
+});
+
+// The rules above hold per KEY, and a key is a wallet in a product — not a
+// wallet. The widget serves two products at once, and a wallet has a separate
+// deposit history in each: its own deposits, its own average deposit cost, its
+// own earnings. A key that named only the wallet would let the 24h product's
+// scan answer for the 30d product, which is not a slow figure or a blank one —
+// it is the wrong earnings, against the wrong share token, at the wrong share
+// price, with nothing on screen looking amiss.
+describe("one wallet in two products (spec, \"Redemptions\")", () => {
+  const WALLET = "0x4636bE4CC1Bb0Cbf9a4d5C1eA5AbC7C0D1e230f9";
+  const KEY_24H = scanKey("coinchange-24h-polygon", WALLET);
+  const KEY_30D = scanKey("coinchange-30d-polygon", WALLET);
+
+  it("is two keys, and the same wallet however it was spelled", () => {
+    expect(KEY_24H).not.toBe(KEY_30D);
+    expect(scanKey("coinchange-24h-polygon", WALLET.toLowerCase())).toBe(KEY_24H);
+    expect(scanKey("coinchange-24h-polygon", WALLET.toUpperCase())).toBe(KEY_24H);
+  });
+
+  it("does not let one product's scan satisfy the other's", () => {
+    const full24 = startScan(NO_SCANS, KEY_24H);
+    const scanned24 = settleScan(full24.runs, started(full24), 500n);
+
+    // The 30d product has never been scanned for this wallet, whatever the 24h
+    // product has done.
+    const full30 = startScan(scanned24.runs, KEY_30D);
+    expect(full30.run?.kind).toBe("full");
+    expect(full30.run?.from).toBeNull(); // and not from the 24h cursor
+  });
+
+  it("does not let one product's cursor resume the other's tail", () => {
+    const full24 = startScan(NO_SCANS, KEY_24H);
+    const scanned24 = settleScan(full24.runs, started(full24), 500n);
+
+    // A deposit into the 30d product: there is no 30d cursor, so this is that
+    // product's full scan and not a tail from block 501.
+    const tail30 = requestTail(scanned24.runs, KEY_30D);
+    expect(tail30.run?.kind).toBe("full");
+    expect(tail30.run?.from).toBeNull();
+  });
+
+  it("keeps a run of one product from committing over the other", () => {
+    const full24 = startScan(NO_SCANS, KEY_24H);
+    const full30 = startScan(full24.runs, KEY_30D);
+
+    // The 24h scan lands after the 30d one started: it is overtaken, exactly as
+    // a wallet switch overtakes a scan, and touches nothing.
+    expect(isCurrent(full30.runs, started(full24))).toBe(false);
+    const stale = settleScan(full30.runs, started(full24), 900n);
+    expect(stale.runs.cursor).toBeNull();
+    expect(stale.runs.key).toBe(KEY_30D);
   });
 });

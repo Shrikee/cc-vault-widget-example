@@ -1,12 +1,18 @@
 import type { ReactNode } from "react";
 
-import type { Vault } from "../lib/vaultRegistry";
+import { WITHDRAW_DISCOUNT_PCT_DEFAULT } from "../config/redemption";
+import { WITHDRAW_TOKEN } from "../config/tokens";
+import { hasVestingGap, type Vault } from "../lib/vaultRegistry";
 import { formatAmount, formatUsd, fmtSignedUsd, signAfterRounding } from "../lib/format";
 import { computeEarnings } from "../lib/apy";
+import { buildPositionExitLine } from "../lib/positionExit";
+import { spreadPpmOf } from "../lib/postingRule";
 import type { DepositHistory } from "../hooks/useDepositHistory";
 import { formatDateTime, formatDuration } from "../lib/time";
 import { useNow } from "../hooks/useNow";
 import { Badge, Card, InlineError, Stat } from "./ui";
+
+const wantSymbol = WITHDRAW_TOKEN.displayName ?? "USDT";
 
 // What a wallet holds in one product — the part of that product's reads this
 // card uses, declared narrowly so the card asks for no more than it shows.
@@ -14,11 +20,16 @@ export interface ProductPosition {
   // The product this position is in — its name and share symbol label the
   // holding, so two positions in one card can never be confused.
   vault: Vault;
-  position: { shares: number | null; unlockAt: number | null };
-  metrics: { shareValue: number | null };
+  // `sharesRaw` and `sharePriceRaw` are the exit sub-line's, not the stat
+  // grid's: an 18-dp balance does not survive a double, and the figure this
+  // card quotes over the WHOLE balance has to be the same figure the withdraw
+  // panel offers on MAX, to the wei.
+  position: { shares: number | null; sharesRaw: bigint | null; unlockAt: number | null };
+  metrics: { shareValue: number | null; sharePriceRaw: bigint | null };
   // Earnings is derived here rather than passed in: the average deposit cost
   // comes from that product's own scan, the shares and share price the card
-  // already has.
+  // already has. That same scan carries the holder history the sub-line prices
+  // against, on the products that have one.
   depositHistory: DepositHistory;
 }
 
@@ -64,8 +75,8 @@ export function PositionCard({
 function ProductPositionBlock({
   product: {
     vault,
-    position: { shares, unlockAt },
-    metrics: { shareValue },
+    position: { shares, sharesRaw, unlockAt },
+    metrics: { shareValue, sharePriceRaw },
     depositHistory,
   },
   now,
@@ -116,6 +127,41 @@ function ProductPositionBlock({
       </>
     );
 
+  // What this holding is worth to exit today, over the WHOLE balance — the
+  // sentence and every figure in it from src/lib/positionExit.ts.
+  //
+  // The gate is the vesting gap, never the vault id: a product whose shares
+  // have vested by the time they unlock prices no exit against a ceiling, and
+  // its block here is stage 1's, untouched.
+  //
+  // It is quoted independently of the earnings figure above, which is why the
+  // history is read straight off the scan rather than off its status: a wallet
+  // that was SENT its shares has no deposits and so no earnings — it keeps the
+  // "—" beside that word — and it has an entitlement like anyone else.
+  //
+  // Two states this line has no wording for yet: a history that could not be
+  // read, and a paused accountant. Both belong to the "when the widget cannot
+  // price" ticket (spec §"When the widget cannot price"), which lands this
+  // card's sentence for each; until then the model returns nothing for the
+  // first and the pause flag is not threaded here at all.
+  const exitLine = hasVestingGap(vault)
+    ? buildPositionExitLine({
+        history: depositHistory.history ?? null,
+        shareBalance: sharesRaw,
+        navPerShare: sharePriceRaw,
+        now,
+        unlockAt,
+        vestingSeconds: vault.vestingSeconds,
+        shareDecimals: vault.ui.decimals,
+        // The widget's default spread, not the withdraw panel's control: this
+        // card is outside that panel, and a figure here that moved with a
+        // number typed over there would be two surfaces disagreeing.
+        defaultSpreadPpm: spreadPpmOf(WITHDRAW_DISCOUNT_PCT_DEFAULT),
+        shareSymbol: vault.ui.symbol,
+        wantSymbol,
+      })
+    : null;
+
   return (
     <div className="position">
       <div className="position__head">
@@ -138,6 +184,8 @@ function ProductPositionBlock({
           hint={earningsHint}
         />
       </div>
+
+      {exitLine !== null && <p className="position__exit">{exitLine}</p>}
 
       {depositHistory.status === "error" && (
         <InlineError>

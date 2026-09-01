@@ -1064,3 +1064,27 @@ a:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* position exit line */
+/* What a holding is worth to exit today, under its stat grid. Quiet — it is a
+   sentence, not a figure, and the two Stats above it are the card's headline.
+   One tone for all four of its forms (src/lib/positionExit.ts): the refusal
+   names its own cause in words, and a red sub-line beside a healthy position
+   value would read as an alarm about the money rather than about the price. */
+.position__exit {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* The explainer's worked example, set off from the step it belongs to: the
+   same rule a second time, on numbers, and skippable at a glance. */
+.timeline__example {
+  margin: 6px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid rgba(20, 184, 166, 0.35);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}

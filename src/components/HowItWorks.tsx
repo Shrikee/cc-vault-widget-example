@@ -1,4 +1,5 @@
-import { hasVestingGap, vestingDays, type Vault } from "../lib/vaultRegistry";
+import { explainerSteps } from "../lib/explainerSteps";
+import type { Vault } from "../lib/vaultRegistry";
 import { Card } from "./ui";
 
 // Explains the deposit -> lock -> request -> solver-fill timeline so the
@@ -9,54 +10,28 @@ import { Card } from "./ui";
 // product rather than once. The share lock is one day on each, but the 30d
 // product's shares keep vesting for thirty days after that, and a holder
 // redeeming in between is entitled to no more than what they paid — a cap and
-// not a floor, so a share price that has fallen below their cost is what they
-// get. A step of its own on that product, and absent on the 24h one where the
-// lock and the vesting term are the same day.
+// not a floor, shown happening to a number in the step's own example.
+//
+// The words are src/lib/explainerSteps.ts's, and the ordered list is this
+// component's: from stage 2 the copy here is the spec's verbatim, and a
+// sentence assembled in JSX is a sentence no test can hold to it.
 export function HowItWorks({ vault }: { vault: Vault }) {
-  const symbol = vault.ui.symbol;
-  const vests = hasVestingGap(vault);
-  const term = vestingDays(vault);
-
-  const steps = [
-    {
-      title: "Deposit USDT",
-      body: `Approve and deposit a stablecoin. You receive ${symbol} vault shares.`,
-    },
-    {
-      title: "1-day share lock",
-      body: `${symbol} shares can't be transferred or redeemed for 1 day after a deposit. Each new deposit restarts the lock for your entire balance.`,
-    },
-    {
-      title: "Earn yield",
-      body: "Your share price accrues as the strategy earns. Hold for as long as you like.",
-    },
-    ...(vests
-      ? [
-          {
-            title: `${term}-day vesting`,
-            body: `This product's shares vest over ${term} days — separately from the 1-day lock. Redeem before they vest and you are entitled to no more than what you paid — a cap, not a floor, so a share price below what you paid is what you get — and the request may need a wider redemption spread to be filled.`,
-          },
-        ]
-      : []),
-    {
-      title: "Request a redemption",
-      body: "Choose how many shares to redeem. This posts a request to the AtomicQueue at NAV minus a small spread.",
-    },
-    {
-      title: "Solver fills to USDT",
-      body: "An off-chain solver fills your request and sends USDT to your wallet — no separate claim step. You can stop an open request before it fills.",
-    },
-  ];
-
   return (
     <Card title="How it works" subtitle="Deposit, earn, redeem">
       <ol className="timeline">
-        {steps.map((s, i) => (
+        {explainerSteps(vault).map((s, i) => (
           <li key={s.title} className="timeline__step">
             <span className="timeline__num">{i + 1}</span>
             <div>
               <p className="timeline__title">{s.title}</p>
               <p className="timeline__body">{s.body}</p>
+              {/* Set off from the body rather than run into it: the example is
+                  the same rule a second time, on numbers, and a depositor who
+                  followed the sentence above should be able to see at a glance
+                  that they may skip it. */}
+              {s.example !== undefined && (
+                <p className="timeline__example">{s.example}</p>
+              )}
             </div>
           </li>
         ))}

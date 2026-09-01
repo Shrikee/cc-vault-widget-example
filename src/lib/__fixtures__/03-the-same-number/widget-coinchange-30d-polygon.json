@@ -1,0 +1,114 @@
+{
+  "setting": "live",
+  "side": "widget",
+  "vault": "coinchange-30d-polygon",
+  "head": "93047000",
+  "now": 1788275533,
+  "navPerShare": "1000396",
+  "nav": {
+    "safe": "1000396",
+    "getRate": "1000396",
+    "lens": "1000396"
+  },
+  "shareDecimals": 18,
+  "vestingSeconds": 2592000,
+  "floor": "92416354",
+  "chunkSpan": 10000,
+  "counts": {
+    "deposit": 2,
+    "transfer": 0,
+    "fill": 0
+  },
+  "raw": {
+    "deposits": 2,
+    "transfers": 2,
+    "fills": 0,
+    "mints": 2,
+    "burns": 0,
+    "legs": 0
+  },
+  "refundsSeen": 0,
+  "shapes": {
+    "productWide": {
+      "ms": 8879,
+      "requests": 256,
+      "chunksPerKind": 64
+    }
+  },
+  "holders": {
+    "0x2fe1d418e376c7df4e3782ec7a787801c88f575d": {
+      "history": [
+        {
+          "kind": "deposit",
+          "t": 1787948253,
+          "shares": "49993900744109218",
+          "assets": "50000"
+        }
+      ],
+      "shareBalance": "49993900744109218",
+      "lensBalance": "49993900744109218",
+      "quotes": {
+        "all": {
+          "entitlement": "49999",
+          "maxAskPrice": "1000122",
+          "vestedShares": "0",
+          "unvestedShares": "49993900744109218"
+        },
+        "half": {
+          "entitlement": "24999",
+          "maxAskPrice": "1000122",
+          "vestedShares": "0",
+          "unvestedShares": "24996950372054609"
+        }
+      },
+      "post": {
+        "discount": "274",
+        "price": "1000121",
+        "fillable": true
+      },
+      "perWallet": {
+        "ms": 7346,
+        "requests": 256,
+        "events": 1,
+        "sameAsProductWide": true
+      }
+    },
+    "0x463639c13d578dd17e8164d83ab7fc6135d130f9": {
+      "history": [
+        {
+          "kind": "deposit",
+          "t": 1788207970,
+          "shares": "999878014882184373",
+          "assets": "1000000"
+        }
+      ],
+      "shareBalance": "999878014882184373",
+      "lensBalance": "999878014882184373",
+      "quotes": {
+        "all": {
+          "entitlement": "999999",
+          "maxAskPrice": "1000122",
+          "vestedShares": "0",
+          "unvestedShares": "999878014882184373"
+        },
+        "half": {
+          "entitlement": "499999",
+          "maxAskPrice": "1000122",
+          "vestedShares": "0",
+          "unvestedShares": "499939007441092186"
+        }
+      },
+      "post": {
+        "discount": "274",
+        "price": "1000121",
+        "fillable": true
+      },
+      "perWallet": {
+        "ms": 7570,
+        "requests": 256,
+        "events": 1,
+        "sameAsProductWide": true
+      }
+    }
+  }
+}

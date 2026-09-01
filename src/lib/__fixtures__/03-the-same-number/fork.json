@@ -1,0 +1,703 @@
+{
+  "setting": "fork",
+  "moments": [
+    {
+      "label": "day 2 — A posts at the computed discount, B and D ask NAV",
+      "head": "25883455",
+      "now": 1788449283,
+      "navPerShare": "1001000",
+      "widgetCounts": {
+        "deposit": 3,
+        "transfer": 2,
+        "fill": 0
+      },
+      "widgetRaw": {
+        "deposits": 3,
+        "transfers": 4,
+        "fills": 0,
+        "mints": 3,
+        "burns": 0,
+        "legs": 0
+      },
+      "holders": {
+        "A": {
+          "address": "0xa802f224ced5a1d6e06766c4aa3899cba752e1ce",
+          "offer": "500000000000000000000",
+          "widget": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276421,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              }
+            ],
+            "shareBalance": "1000000000000000000000",
+            "quote": {
+              "entitlement": "500000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "500000000000000000000"
+            }
+          },
+          "solverLedger": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276421,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              }
+            ],
+            "shareBalance": "1000000000000000000000",
+            "quote": {
+              "entitlement": "500000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "500000000000000000000"
+            }
+          },
+          "expectedCeiling": "1000000",
+          "liveRequest": {
+            "atomicPrice": "999999",
+            "offerAmount": "500000000000000000000",
+            "aboveCeiling": false,
+            "rePostDiscount": "1000",
+            "rePostPrice": "999999"
+          }
+        },
+        "B": {
+          "address": "0xcb036227ae31603eae3cb845847f1556192d7246",
+          "offer": "1000000000000000000000",
+          "widget": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276421,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              }
+            ],
+            "shareBalance": "1000000000000000000000",
+            "quote": {
+              "entitlement": "1000000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "1000000000000000000000"
+            }
+          },
+          "solverLedger": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276421,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              }
+            ],
+            "shareBalance": "1000000000000000000000",
+            "quote": {
+              "entitlement": "1000000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "1000000000000000000000"
+            }
+          },
+          "expectedCeiling": "1000000",
+          "liveRequest": {
+            "atomicPrice": "1001000",
+            "offerAmount": "1000000000000000000000",
+            "aboveCeiling": true,
+            "rePostDiscount": "1000",
+            "rePostPrice": "999999"
+          }
+        },
+        "C": {
+          "address": "0xd79b554daa09e2dc4ead5731cb9a2835ffa88c59",
+          "offer": "600000000000000000000",
+          "widget": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276422,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              },
+              {
+                "kind": "transfer-out",
+                "t": 1788362882,
+                "shares": "400000000000000000000"
+              }
+            ],
+            "shareBalance": "600000000000000000000",
+            "quote": {
+              "entitlement": "600000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "600000000000000000000"
+            }
+          },
+          "solverLedger": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276422,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              },
+              {
+                "kind": "transfer-out",
+                "t": 1788362882,
+                "shares": "400000000000000000000"
+              }
+            ],
+            "shareBalance": "600000000000000000000",
+            "quote": {
+              "entitlement": "600000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "600000000000000000000"
+            }
+          },
+          "expectedCeiling": "1000000",
+          "liveRequest": null
+        },
+        "D": {
+          "address": "0x5df638485db34ff4fb5a1c565b9b27c12851ed38",
+          "offer": "400000000000000000000",
+          "widget": {
+            "history": [
+              {
+                "kind": "transfer-in",
+                "t": 1788362882,
+                "shares": "400000000000000000000",
+                "rate": "1000000"
+              }
+            ],
+            "shareBalance": "400000000000000000000",
+            "quote": {
+              "entitlement": "400000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "400000000000000000000"
+            }
+          },
+          "solverLedger": {
+            "history": [
+              {
+                "kind": "transfer-in",
+                "t": 1788362882,
+                "shares": "400000000000000000000",
+                "rate": "1000000"
+              }
+            ],
+            "shareBalance": "400000000000000000000",
+            "quote": {
+              "entitlement": "400000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "400000000000000000000"
+            }
+          },
+          "expectedCeiling": "1000000",
+          "liveRequest": {
+            "atomicPrice": "1001000",
+            "offerAmount": "400000000000000000000",
+            "aboveCeiling": true,
+            "rePostDiscount": "1000",
+            "rePostPrice": "999999"
+          }
+        }
+      },
+      "fillOnce": {
+        "filled": [
+          "A"
+        ],
+        "skipped": [
+          "B:ask-above-entitlement",
+          "D:ask-above-entitlement"
+        ],
+        "ceilings": [
+          {
+            "holder": "A",
+            "maxAskPrice": "1000000"
+          },
+          {
+            "holder": "B",
+            "maxAskPrice": "1000000"
+          },
+          {
+            "holder": "D",
+            "maxAskPrice": "1000000"
+          }
+        ],
+        "sweptToTreasury": "500500"
+      }
+    },
+    {
+      "label": "day 2 — after A's fill, A re-posts asking NAV",
+      "head": "25883458",
+      "now": 1788449284,
+      "navPerShare": "1001000",
+      "widgetCounts": {
+        "deposit": 3,
+        "transfer": 2,
+        "fill": 1
+      },
+      "widgetRaw": {
+        "deposits": 3,
+        "transfers": 6,
+        "fills": 1,
+        "mints": 3,
+        "burns": 1,
+        "legs": 1
+      },
+      "holders": {
+        "A": {
+          "address": "0xa802f224ced5a1d6e06766c4aa3899cba752e1ce",
+          "offer": "500000000000000000000",
+          "widget": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276421,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              },
+              {
+                "kind": "fill",
+                "t": 1788449284,
+                "shares": "500000000000000000000"
+              }
+            ],
+            "shareBalance": "500000000000000000000",
+            "quote": {
+              "entitlement": "500000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "500000000000000000000"
+            }
+          },
+          "solverLedger": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276421,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              },
+              {
+                "kind": "fill",
+                "t": 1788449284,
+                "shares": "500000000000000000000"
+              }
+            ],
+            "shareBalance": "500000000000000000000",
+            "quote": {
+              "entitlement": "500000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "500000000000000000000"
+            }
+          },
+          "expectedCeiling": "1000000",
+          "liveRequest": {
+            "atomicPrice": "1001000",
+            "offerAmount": "500000000000000000000",
+            "aboveCeiling": true,
+            "rePostDiscount": "1000",
+            "rePostPrice": "999999"
+          }
+        },
+        "B": {
+          "address": "0xcb036227ae31603eae3cb845847f1556192d7246",
+          "offer": "1000000000000000000000",
+          "widget": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276421,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              }
+            ],
+            "shareBalance": "1000000000000000000000",
+            "quote": {
+              "entitlement": "1000000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "1000000000000000000000"
+            }
+          },
+          "solverLedger": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276421,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              }
+            ],
+            "shareBalance": "1000000000000000000000",
+            "quote": {
+              "entitlement": "1000000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "1000000000000000000000"
+            }
+          },
+          "expectedCeiling": "1000000",
+          "liveRequest": {
+            "atomicPrice": "1001000",
+            "offerAmount": "1000000000000000000000",
+            "aboveCeiling": true,
+            "rePostDiscount": "1000",
+            "rePostPrice": "999999"
+          }
+        },
+        "C": {
+          "address": "0xd79b554daa09e2dc4ead5731cb9a2835ffa88c59",
+          "offer": "600000000000000000000",
+          "widget": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276422,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              },
+              {
+                "kind": "transfer-out",
+                "t": 1788362882,
+                "shares": "400000000000000000000"
+              }
+            ],
+            "shareBalance": "600000000000000000000",
+            "quote": {
+              "entitlement": "600000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "600000000000000000000"
+            }
+          },
+          "solverLedger": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276422,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              },
+              {
+                "kind": "transfer-out",
+                "t": 1788362882,
+                "shares": "400000000000000000000"
+              }
+            ],
+            "shareBalance": "600000000000000000000",
+            "quote": {
+              "entitlement": "600000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "600000000000000000000"
+            }
+          },
+          "expectedCeiling": "1000000",
+          "liveRequest": null
+        },
+        "D": {
+          "address": "0x5df638485db34ff4fb5a1c565b9b27c12851ed38",
+          "offer": "400000000000000000000",
+          "widget": {
+            "history": [
+              {
+                "kind": "transfer-in",
+                "t": 1788362882,
+                "shares": "400000000000000000000",
+                "rate": "1000000"
+              }
+            ],
+            "shareBalance": "400000000000000000000",
+            "quote": {
+              "entitlement": "400000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "400000000000000000000"
+            }
+          },
+          "solverLedger": {
+            "history": [
+              {
+                "kind": "transfer-in",
+                "t": 1788362882,
+                "shares": "400000000000000000000",
+                "rate": "1000000"
+              }
+            ],
+            "shareBalance": "400000000000000000000",
+            "quote": {
+              "entitlement": "400000000",
+              "maxAskPrice": "1000000",
+              "vestedShares": "0",
+              "unvestedShares": "400000000000000000000"
+            }
+          },
+          "expectedCeiling": "1000000",
+          "liveRequest": {
+            "atomicPrice": "1001000",
+            "offerAmount": "400000000000000000000",
+            "aboveCeiling": true,
+            "rePostDiscount": "1000",
+            "rePostPrice": "999999"
+          }
+        }
+      },
+      "fillOnce": {
+        "filled": [],
+        "skipped": [
+          "A:ask-above-entitlement"
+        ],
+        "ceilings": [
+          {
+            "holder": "A",
+            "maxAskPrice": "1000000"
+          }
+        ],
+        "sweptToTreasury": "0"
+      }
+    },
+    {
+      "label": "day 32 — B re-posts at NAV, vested",
+      "head": "25883461",
+      "now": 1791041284,
+      "navPerShare": "1002001",
+      "widgetCounts": {
+        "deposit": 3,
+        "transfer": 2,
+        "fill": 1
+      },
+      "widgetRaw": {
+        "deposits": 3,
+        "transfers": 6,
+        "fills": 1,
+        "mints": 3,
+        "burns": 1,
+        "legs": 1
+      },
+      "holders": {
+        "A": {
+          "address": "0xa802f224ced5a1d6e06766c4aa3899cba752e1ce",
+          "offer": "500000000000000000000",
+          "widget": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276421,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              },
+              {
+                "kind": "fill",
+                "t": 1788449284,
+                "shares": "500000000000000000000"
+              }
+            ],
+            "shareBalance": "500000000000000000000",
+            "quote": {
+              "entitlement": "501000500",
+              "maxAskPrice": "1002001",
+              "vestedShares": "500000000000000000000",
+              "unvestedShares": "0"
+            }
+          },
+          "solverLedger": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276421,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              },
+              {
+                "kind": "fill",
+                "t": 1788449284,
+                "shares": "500000000000000000000"
+              }
+            ],
+            "shareBalance": "500000000000000000000",
+            "quote": {
+              "entitlement": "501000500",
+              "maxAskPrice": "1002001",
+              "vestedShares": "500000000000000000000",
+              "unvestedShares": "0"
+            }
+          },
+          "expectedCeiling": "1002001",
+          "liveRequest": {
+            "atomicPrice": "1001000",
+            "offerAmount": "500000000000000000000",
+            "aboveCeiling": false,
+            "rePostDiscount": "0",
+            "rePostPrice": "1002001"
+          }
+        },
+        "B": {
+          "address": "0xcb036227ae31603eae3cb845847f1556192d7246",
+          "offer": "1000000000000000000000",
+          "widget": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276421,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              }
+            ],
+            "shareBalance": "1000000000000000000000",
+            "quote": {
+              "entitlement": "1002001000",
+              "maxAskPrice": "1002001",
+              "vestedShares": "1000000000000000000000",
+              "unvestedShares": "0"
+            }
+          },
+          "solverLedger": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276421,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              }
+            ],
+            "shareBalance": "1000000000000000000000",
+            "quote": {
+              "entitlement": "1002001000",
+              "maxAskPrice": "1002001",
+              "vestedShares": "1000000000000000000000",
+              "unvestedShares": "0"
+            }
+          },
+          "expectedCeiling": "1002001",
+          "liveRequest": {
+            "atomicPrice": "1002001",
+            "offerAmount": "1000000000000000000000",
+            "aboveCeiling": false,
+            "rePostDiscount": "0",
+            "rePostPrice": "1002001"
+          }
+        },
+        "C": {
+          "address": "0xd79b554daa09e2dc4ead5731cb9a2835ffa88c59",
+          "offer": "600000000000000000000",
+          "widget": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276422,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              },
+              {
+                "kind": "transfer-out",
+                "t": 1788362882,
+                "shares": "400000000000000000000"
+              }
+            ],
+            "shareBalance": "600000000000000000000",
+            "quote": {
+              "entitlement": "601200600",
+              "maxAskPrice": "1002001",
+              "vestedShares": "600000000000000000000",
+              "unvestedShares": "0"
+            }
+          },
+          "solverLedger": {
+            "history": [
+              {
+                "kind": "deposit",
+                "t": 1788276422,
+                "shares": "1000000000000000000000",
+                "assets": "1000000000"
+              },
+              {
+                "kind": "transfer-out",
+                "t": 1788362882,
+                "shares": "400000000000000000000"
+              }
+            ],
+            "shareBalance": "600000000000000000000",
+            "quote": {
+              "entitlement": "601200600",
+              "maxAskPrice": "1002001",
+              "vestedShares": "600000000000000000000",
+              "unvestedShares": "0"
+            }
+          },
+          "expectedCeiling": "1002001",
+          "liveRequest": null
+        },
+        "D": {
+          "address": "0x5df638485db34ff4fb5a1c565b9b27c12851ed38",
+          "offer": "400000000000000000000",
+          "widget": {
+            "history": [
+              {
+                "kind": "transfer-in",
+                "t": 1788362882,
+                "shares": "400000000000000000000",
+                "rate": "1000000"
+              }
+            ],
+            "shareBalance": "400000000000000000000",
+            "quote": {
+              "entitlement": "400800400",
+              "maxAskPrice": "1002001",
+              "vestedShares": "400000000000000000000",
+              "unvestedShares": "0"
+            }
+          },
+          "solverLedger": {
+            "history": [
+              {
+                "kind": "transfer-in",
+                "t": 1788362882,
+                "shares": "400000000000000000000",
+                "rate": "1000000"
+              }
+            ],
+            "shareBalance": "400000000000000000000",
+            "quote": {
+              "entitlement": "400800400",
+              "maxAskPrice": "1002001",
+              "vestedShares": "400000000000000000000",
+              "unvestedShares": "0"
+            }
+          },
+          "expectedCeiling": "1002001",
+          "liveRequest": {
+            "atomicPrice": "1001000",
+            "offerAmount": "400000000000000000000",
+            "aboveCeiling": false,
+            "rePostDiscount": "0",
+            "rePostPrice": "1002001"
+          }
+        }
+      },
+      "fillOnce": {
+        "filled": [
+          "B"
+        ],
+        "skipped": [],
+        "ceilings": [
+          {
+            "holder": "B",
+            "maxAskPrice": "1002001"
+          }
+        ],
+        "sweptToTreasury": "0"
+      }
+    }
+  ],
+  "divergences": 0
+}

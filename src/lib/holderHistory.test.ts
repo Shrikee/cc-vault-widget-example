@@ -47,7 +47,7 @@ import type { RawLog } from "./logScan";
 // =============================================================================
 
 const OUT = new URL(
-  "../../docs/wayfinder/entitlement/assets/03-the-same-number/out/",
+  "./__fixtures__/03-the-same-number/",
   import.meta.url
 );
 const fixture = <T>(name: string): T =>

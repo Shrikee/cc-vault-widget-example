@@ -1,0 +1,70 @@
+{
+  "setting": "live",
+  "side": "solver",
+  "vault": "coinchange-30d-polygon",
+  "head": 93047000,
+  "now": 1788275533,
+  "navPerShare": "1000396",
+  "shareDecimals": 18,
+  "vestingSeconds": 2592000,
+  "floor": 92416354,
+  "maxBlocksPerScan": 1000,
+  "rpcMaxConcurrency": 8,
+  "walk": {
+    "ms": 55329,
+    "requests": 2524,
+    "retries": 0
+  },
+  "holders": {
+    "0x2fe1d418e376c7df4e3782ec7a787801c88f575d": {
+      "history": [
+        {
+          "kind": "deposit",
+          "t": 1787948253,
+          "shares": "49993900744109218",
+          "assets": "50000"
+        }
+      ],
+      "shareBalance": "49993900744109218",
+      "quotes": {
+        "all": {
+          "entitlement": "49999",
+          "maxAskPrice": "1000122",
+          "vestedShares": "0",
+          "unvestedShares": "49993900744109218"
+        },
+        "half": {
+          "entitlement": "24999",
+          "maxAskPrice": "1000122",
+          "vestedShares": "0",
+          "unvestedShares": "24996950372054609"
+        }
+      }
+    },
+    "0x463639c13d578dd17e8164d83ab7fc6135d130f9": {
+      "history": [
+        {
+          "kind": "deposit",
+          "t": 1788207970,
+          "shares": "999878014882184373",
+          "assets": "1000000"
+        }
+      ],
+      "shareBalance": "999878014882184373",
+      "quotes": {
+        "all": {
+          "entitlement": "999999",
+          "maxAskPrice": "1000122",
+          "vestedShares": "0",
+          "unvestedShares": "999878014882184373"
+        },
+        "half": {
+          "entitlement": "499999",
+          "maxAskPrice": "1000122",
+          "vestedShares": "0",
+          "unvestedShares": "499939007441092186"
+        }
+      }
+    }
+  }
+}

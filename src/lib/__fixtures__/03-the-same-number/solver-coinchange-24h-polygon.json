@@ -1,0 +1,98 @@
+{
+  "setting": "live",
+  "side": "solver",
+  "vault": "coinchange-24h-polygon",
+  "head": 93047000,
+  "now": 1788275533,
+  "navPerShare": "1000319",
+  "shareDecimals": 18,
+  "vestingSeconds": 86400,
+  "floor": 91901943,
+  "maxBlocksPerScan": 1000,
+  "rpcMaxConcurrency": 8,
+  "walk": {
+    "ms": 99965,
+    "requests": 4584,
+    "retries": 0
+  },
+  "holders": {
+    "0x2fe1d418e376c7df4e3782ec7a787801c88f575d": {
+      "history": [
+        {
+          "kind": "deposit",
+          "t": 1786729630,
+          "shares": "100000000000000000",
+          "assets": "100000"
+        },
+        {
+          "kind": "deposit",
+          "t": 1786735719,
+          "shares": "100000000000000000",
+          "assets": "100000"
+        },
+        {
+          "kind": "deposit",
+          "t": 1786736013,
+          "shares": "100000000000000000",
+          "assets": "100000"
+        },
+        {
+          "kind": "fill",
+          "t": 1787230296,
+          "shares": "200000000000000000"
+        },
+        {
+          "kind": "fill",
+          "t": 1787832208,
+          "shares": "50000000000000000"
+        }
+      ],
+      "shareBalance": "50000000000000000",
+      "quotes": {
+        "all": {
+          "entitlement": "50015",
+          "maxAskPrice": "1000319",
+          "vestedShares": "50000000000000000",
+          "unvestedShares": "0"
+        },
+        "half": {
+          "entitlement": "25007",
+          "maxAskPrice": "1000319",
+          "vestedShares": "25000000000000000",
+          "unvestedShares": "0"
+        }
+      }
+    },
+    "0x463639c13d578dd17e8164d83ab7fc6135d130f9": {
+      "history": [
+        {
+          "kind": "deposit",
+          "t": 1787836891,
+          "shares": "1000000000000000000",
+          "assets": "1000000"
+        },
+        {
+          "kind": "deposit",
+          "t": 1788184849,
+          "shares": "14996041045164076683",
+          "assets": "15000000"
+        }
+      ],
+      "shareBalance": "15996041045164076683",
+      "quotes": {
+        "all": {
+          "entitlement": "16001143",
+          "maxAskPrice": "1000319",
+          "vestedShares": "15996041045164076683",
+          "unvestedShares": "0"
+        },
+        "half": {
+          "entitlement": "8000571",
+          "maxAskPrice": "1000319",
+          "vestedShares": "7998020522582038341",
+          "unvestedShares": "0"
+        }
+      }
+    }
+  }
+}

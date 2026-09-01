@@ -1,4 +1,6 @@
-// One in-flight budget, shared by every log scan in the app.
+// One in-flight budget, shared by every scan request in the app — the log
+// chunks, and the block and rate reads a wallet scan's second phase makes
+// beside them (src/lib/walletScan.ts).
 //
 // The concurrency limit used to belong to a scan: each call to scanLogs ran its
 // own chunks a few at a time, which was right while the widget had one product

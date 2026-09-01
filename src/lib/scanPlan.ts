@@ -278,9 +278,9 @@ export function walletScanRanges({
   // cost excludes refunded deposits and the history deliberately keeps them, and
   // that divergence belongs to the derivations, not to the scan.
   //
-  // src/hooks/useDepositHistory.ts still builds this same filter inline. The
-  // ticket that widens that scan onto these ranges is what collapses the two;
-  // until it does, the two spellings must stay in step.
+  // This is the ONLY spelling of that filter — src/lib/walletScan.ts issues
+  // these ranges and nothing else, so stage 1's deposit scan and the history
+  // read cannot drift apart into two filters that disagree.
   const deposit: WalletScanRange = {
     ...blocks,
     kind: "deposit",

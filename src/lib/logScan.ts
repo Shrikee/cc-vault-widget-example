@@ -45,11 +45,20 @@ export interface ScanLogsParams {
 // endpoint's rather than any caller's — how many requests it will have in
 // flight and how many it will take per second — so no caller passes either: a
 // scan asks for its chunks and waits its turn like every other scan.
-const CHUNK_BUDGET = createInFlightBudget(historyChunksInFlight(), {
+//
+// Exported because a scan's chunks are not the only requests it makes: a wallet
+// scan's second phase dates and rates its transfer blocks (./walletScan.ts),
+// and those go to the same endpoint. Pacing the chunks and then firing those
+// unbudgeted would trip the rate limit at the end of every long history.
+export const SCAN_BUDGET = createInFlightBudget(historyChunksInFlight(), {
   requestsPerSecond: SCAN_REQUESTS_PER_SECOND,
 });
 
-const toHex = (n: bigint): Hex => `0x${n.toString(16)}`;
+// A block number as the JSON-RPC quantity every method takes it as. Exported
+// beside the budget: a wallet scan's second phase names blocks to the same
+// endpoint (./walletScan.ts), and two spellings of a hex quantity is one more
+// than the chain needs.
+export const toHex = (n: bigint): Hex => `0x${n.toString(16)}`;
 
 // [fromBlock, toBlock] split into ranges the provider will accept. Exported so
 // the scan-planning vectors can count what a plan costs in REQUESTS with the
@@ -104,7 +113,7 @@ export async function scanLogs({
   // Raw eth_getLogs rather than viem's getLogs: the topic filter is passed
   // through verbatim, which is what a filter like "either of these two events,
   // this wallet in topics[2]" needs (spec §5.1).
-  const chunks = await mapWithBudget(ranges, CHUNK_BUDGET, ([from, to]) =>
+  const chunks = await mapWithBudget(ranges, SCAN_BUDGET, ([from, to]) =>
     client.request({
       method: "eth_getLogs",
       params: [{ address, topics, fromBlock: toHex(from), toBlock: toHex(to) }],

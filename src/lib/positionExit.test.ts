@@ -33,6 +33,14 @@ const NOW = 1_788_264_000;
 
 const ago = (days: number): number => NOW - Math.round(days * DAY);
 
+// A scan that failed, as `PricedHistory.unreadable` hands it over. This card
+// reads only whether it is there — it has one sentence for either reason — so
+// one shape stands for both.
+const READ_FAILED = {
+  kind: "read-failed",
+  detail: "chunk 41 timed out",
+} as const;
+
 // `shares` whole shares bought at `entry` want per whole share.
 const deposit = (t: number, shares: number, entry: bigint): HolderEvent => ({
   kind: "deposit",
@@ -57,6 +65,8 @@ function inputs(
     navPerShare,
     now: NOW,
     unlockAt: NOW - DAY,
+    paused: false,
+    unreadable: null,
     vestingSeconds: VESTING,
     shareDecimals: 18,
     // The widget's default redemption spread, in the queue's ppm — never the
@@ -227,19 +237,60 @@ describe("the lock", () => {
   });
 });
 
-// Nothing is quoted from a read the widget does not have. The wordings for an
-// unreadable history and a paused accountant are the "when the widget cannot
-// price" ticket's, and land with it; until then this surface stays silent
-// rather than guessing at them.
+// Nothing is quoted from a read the widget does not have — but the two states
+// it can NAME are named, verbatim from the spec (§"When the widget cannot
+// price"). A holding is still a holding when the price under it cannot be
+// computed, and "Redeemable today" with no figure is more honest than a blank
+// line under a balance the depositor can see.
 describe("what it will not price", () => {
-  it("says nothing without a history, a balance or a rate", () => {
-    expect(buildPositionExitLine(mixed({ history: null }))).toBeNull();
-    expect(buildPositionExitLine(mixed({ shareBalance: null }))).toBeNull();
-    expect(buildPositionExitLine(mixed({ navPerShare: null }))).toBeNull();
-    expect(buildPositionExitLine(mixed({ navPerShare: 0n }))).toBeNull();
+  it("says the share price is under review, when the accountant is paused", () => {
+    expect(buildPositionExitLine(mixed({ paused: true }))).toBe(
+      "Redeemable today — not while the share price is under review."
+    );
   });
 
-  it("says nothing to a wallet holding none of the product", () => {
+  it("says the history could not be read, when the scan or the floor failed", () => {
+    expect(
+      buildPositionExitLine(mixed({ history: null, unreadable: READ_FAILED }))
+    ).toBe("Redeemable today — couldn't read your history.");
+  });
+
+  it("answers the pause first, when both are true", () => {
+    // The same order the quote card keeps: the pause is the live operator state
+    // and the one that also closes the post.
+    expect(
+      buildPositionExitLine(mixed({ paused: true, history: null, unreadable: READ_FAILED }))
+    ).toBe("Redeemable today — not while the share price is under review.");
+  });
+
+  it("says nothing while a read is merely still in flight", () => {
+    // No wording: nothing has failed, and a sentence about a failure would not
+    // be true yet. Silence is the one thing that cannot be wrong here.
+    expect(buildPositionExitLine(mixed({ history: null }))).toBeNull();
+    // Including a pause flag nobody has answered for. It is not permission to
+    // price — the auto-pause stores the out-of-bounds rate BEFORE setting the
+    // flag — and it is not the paused sentence either.
+    expect(buildPositionExitLine(mixed({ paused: null }))).toBeNull();
+    expect(buildPositionExitLine(mixed({ navPerShare: null }))).toBeNull();
+    expect(buildPositionExitLine(mixed({ navPerShare: 0n }))).toBeNull();
+    expect(buildPositionExitLine(mixed({ shareBalance: null }))).toBeNull();
+  });
+
+  it("says nothing at all to a wallet holding none of the product", () => {
+    // Not even the two degraded lines: there is no exit to describe, so
+    // "Redeemable today" over a zero balance would be a sentence about nothing.
     expect(buildPositionExitLine(mixed({ shareBalance: 0n }))).toBeNull();
+    expect(
+      buildPositionExitLine(mixed({ shareBalance: 0n, paused: true }))
+    ).toBeNull();
+    expect(
+      buildPositionExitLine(
+        mixed({ shareBalance: 0n, history: null, unreadable: READ_FAILED })
+      )
+    ).toBeNull();
+    // And nothing when the balance itself is what has not been read.
+    expect(
+      buildPositionExitLine(mixed({ shareBalance: null, paused: true }))
+    ).toBeNull();
   });
 });

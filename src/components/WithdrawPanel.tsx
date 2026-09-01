@@ -6,6 +6,7 @@ import { useBoringVaultV1 } from "../lib/boringVault";
 import { useStatusToasts } from "../hooks/useStatusToasts";
 import { useConfirmPin } from "../hooks/useConfirmPin";
 import { useNow } from "../hooks/useNow";
+import type { ProductPricing } from "../hooks/useProductReads";
 import type { WithdrawRequest } from "../hooks/useWithdrawRequest";
 import { explorerAddress } from "../config/chain";
 import {
@@ -14,7 +15,6 @@ import {
   WITHDRAW_VALID_DAYS_DEFAULT,
 } from "../config/redemption";
 import { WITHDRAW_TOKEN } from "../config/tokens";
-import type { HolderEvent } from "../entitlement/entitlement";
 import { hasVestingGap, type Vault } from "../lib/vaultRegistry";
 import { formatAmount, parseAmount, shortAddress } from "../lib/format";
 import {
@@ -43,10 +43,11 @@ export function WithdrawPanel({
   sharesRaw,
   shareValue,
   sharePriceRaw,
-  history,
+  pricing,
   unlockAt,
   rightChain,
   paused,
+  pricingPaused,
   request,
   refetchRequest,
   repost,
@@ -67,13 +68,24 @@ export function WithdrawPanel({
   // priced against the entitlement ceiling is bigints throughout, because the
   // two are compared to the want unit.
   sharePriceRaw: bigint | null;
-  // This wallet's holder history in this product — what the entitlement
-  // ceiling is computed from. Only a vesting-gap product has one, and only
-  // once its scan has landed.
-  history: readonly HolderEvent[] | null;
+  // What may be priced from this wallet's history in this product, why not when
+  // nothing may be, and the one control that asks again
+  // (src/lib/pricedHistory.ts). Only a vesting-gap product ever has a history;
+  // everywhere else this is a settled "nothing to price from", which is also
+  // true and which stage 1's panel never asks about.
+  pricing: ProductPricing;
   unlockAt: number | null;
   rightChain: boolean;
+  // The panel's POSTING gate — stage 1's, and true of a paused queue as well as
+  // a paused accountant. It disables the button and nothing else.
   paused: boolean;
+  // The ACCOUNTANT's flag alone, which is a different question: whether the
+  // share price is under review, and so whether anything may be priced. Null
+  // until its poll has answered. The two are kept apart because a paused queue
+  // has no opinion about the share price, and the quote card must not say the
+  // price is under review when it is not (spec §"When the widget cannot
+  // price").
+  pricingPaused: boolean | null;
   // This product's open request, if there is one. The panel no longer RENDERS
   // it — that moved to the side rail's redemptions card, where a request is
   // visible from either product and either tab (spec, "Redemptions") — but it
@@ -173,12 +185,13 @@ export function WithdrawPanel({
   // panel is stage 1's, untouched.
   const quote = hasVestingGap(vault)
     ? buildWithdrawQuote({
-        history,
+        history: pricing.history,
+        unreadable: pricing.unreadable,
         shareBalance: sharesRaw,
         navPerShare: sharePriceRaw,
         now,
         unlockAt,
-        paused,
+        paused: pricingPaused,
         vestingSeconds: vault.vestingSeconds,
         shareLockSeconds: vault.ui.shareLockPeriod,
         shareDecimals: vault.ui.decimals,
@@ -352,17 +365,26 @@ export function WithdrawPanel({
           depositor came with, not another row. The stage-1 vesting notice is
           gone from this panel — the card says it, with this amount's own
           numbers in it (the deposit panel's notice is untouched). */}
-      {quote && <QuoteCard card={quote.card} onUseOffer={setAmount} />}
+      {quote && (
+        <QuoteCard
+          card={quote.card}
+          onUseOffer={setAmount}
+          onTryAgain={pricing.retry}
+        />
+      )}
 
-      {/* The disclosure of last resort. The card normally carries it — with
-          this amount's own numbers in it — but where nothing could be priced
-          (the rate under review, a history or rate not yet read) posting still
-          stays OPEN at the holder's own spread, and ADR-0003 allows that only
-          disclosed. So stage 1's generic notice stands in for exactly those
-          states, until the "when the widget cannot price" ticket lands wordings
-          of their own. On a product with no vesting gap it renders nothing, as
-          it always did, and the deposit panel's copy is untouched. */}
-      {quote?.cannotPrice && <VestingNotice vault={vault} />}
+      {/* The disclosure of last resort, for the one state that has no wording
+          of its own: a read that has not landed yet. Nothing has failed there,
+          so the card says nothing — and posting stays OPEN at the holder's own
+          spread, which ADR-0003 allows only disclosed, so stage 1's generic
+          notice stands in.
+
+          Which states those are is the model's decision, never this JSX's: the
+          paused and unreadable cards carry their own disclosure, and showing
+          this beside them would say the weaker half of it twice. On a product
+          with no vesting gap it renders nothing, as it always did, and the
+          deposit panel's copy is untouched. */}
+      {quote?.discloseVesting && <VestingNotice vault={vault} />}
 
       <div className="rows">
         <div className="row">
@@ -521,6 +543,7 @@ export function WithdrawPanel({
             status={pin.status}
             pin={pin.pin}
             notice={pin.notice}
+            onTryAgain={pin.retry}
             // Stage 1's signing note, minus the six words that promise a
             // fill: "an off-chain solver fills it and sends you USDT" is
             // exactly what the pinned footer below exists to withhold. What it

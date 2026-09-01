@@ -1,8 +1,10 @@
 import { useCallback } from "react";
 import type { Address } from "viem";
 
+import { pricedHistory, type PricedHistory } from "../lib/pricedHistory";
 import type { Vault, VaultRoster } from "../lib/vaultRegistry";
 import { useDepositHistory, type DepositHistory } from "./useDepositHistory";
+import { useLedgerFloor } from "./useLedgerFloor";
 import { usePauseStatus, type PauseStatus } from "./usePauseStatus";
 import { useShareHistory, type ShareHistory } from "./useShareHistory";
 import { useUserPosition, type UserPosition } from "./useUserPosition";
@@ -22,6 +24,13 @@ import { useWindowApys, type WindowApys } from "./useWindowApys";
 // Nothing new is read here: this is the bundle App already assembled for the
 // one vault it served, given a name so it can be assembled twice.
 
+// The pricing decision, plus the one control that can change it: a full re-scan
+// AND a fresh floor check, together, because a surface offering "Try again" has
+// no idea which of the two is what failed and a depositor should not have to.
+export interface ProductPricing extends PricedHistory {
+  retry: () => void;
+}
+
 export interface ProductReads {
   vault: Vault;
   metrics: VaultMetrics;
@@ -31,6 +40,17 @@ export interface ProductReads {
   apys: WindowApys;
   position: UserPosition;
   depositHistory: DepositHistory;
+  // What may be PRICED from that scan, and why not when nothing may be — the
+  // scan's own outcome and this product's ledger floor, decided once
+  // (src/lib/pricedHistory.ts).
+  //
+  // Every priced surface reads this rather than the scan: the withdraw panel's
+  // quote card, the position card's sub-line and the side rail's request row
+  // cannot disagree about whether this wallet can be priced, because there is
+  // one decision and they all read it. The scan above stays exposed for the
+  // EARNINGS figure, which is a different question with different answers — a
+  // wallet sent its shares has an entitlement and no earnings at all.
+  pricing: ProductPricing;
   // Every product's pause flags, not just the selected one's. The banner only
   // ever names the product on screen, but the side rail's request row prices a
   // live request OUTSIDE the selection (spec, "Request row (side rail, outside
@@ -66,7 +86,38 @@ export function useProductReads(
   // scanned; and when the read failed there is no telling that case from a
   // depositor's, so the sub-line says so rather than waiting forever.
   const depositHistory = useDepositHistory(vault, address, position);
+  // The registry's ledger floor, checked once per vesting-gap product per
+  // session (src/hooks/useLedgerFloor.ts). It is a fact about the REGISTRY, not
+  // about this wallet, which is why it is read beside the scan rather than
+  // inside it.
+  const floor = useLedgerFloor(vault);
   const apys = useWindowApys(vault, history, metrics);
+
+  // The one decision every priced surface reads. Recomputed on each render
+  // rather than memoised: it is a pure function of two values already in hand,
+  // and the surfaces below it are not memoised on this object either — they
+  // re-render with their product's reads regardless.
+  const scanRescan = depositHistory.rescan;
+  const floorRecheck = floor.recheck;
+  const retryPricing = useCallback(() => {
+    // Both, in this order. The floor entry is dropped first so a re-scan that
+    // finishes fast cannot be judged against a stale verdict.
+    floorRecheck();
+    scanRescan();
+  }, [floorRecheck, scanRescan]);
+  const pricing: ProductPricing = {
+    ...pricedHistory(floor.verdict, {
+      history: depositHistory.history,
+      // The scan's failure, in the chain's own words. Only the "error" status
+      // carries one — the other five are a scan that worked, is working, or was
+      // never worth making.
+      error:
+        depositHistory.status === "error"
+          ? depositHistory.error ?? "the scan did not complete"
+          : null,
+    }),
+    retry: retryPricing,
+  };
 
   // A fill has already happened by the time it is observed — the solver zeroes
   // the request and sends the USDT in one transaction, with no claim step — so
@@ -90,6 +141,7 @@ export function useProductReads(
     apys,
     position,
     depositHistory,
+    pricing,
     withdrawRequest,
   };
 }

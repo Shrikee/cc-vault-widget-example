@@ -106,13 +106,21 @@ export interface RequestRepost {
 
 export type RequestRowJudgement =
   // Stage 1's row, untouched: a product with no vesting gap, a request nobody
-  // may re-price, or a read this could not price from.
+  // may re-price, a read still in flight, or a history that could not be read.
   //
-  // The degraded wordings the spec asks for in those last cases — "Couldn't
-  // read your history…" and the paused row — land with the "When the widget
-  // cannot price" ticket, which owns them on every surface at once. Until then
-  // the row keeps what stage 1 said, which claims nothing this cannot support.
+  // The unreadable history keeps stage 1's row DELIBERATELY (spec §"When the
+  // widget cannot price": "stage 1's note and the deadline; no strip, no
+  // re-post offer"). Stage 1's note says a request may sit open because shares
+  // vest after they unlock, which is still true and still the reason — the
+  // widget has merely lost the ability to say by how much. The place that
+  // names the failure and offers the re-scan is the withdraw panel's quote
+  // card, which is also the only place with a control to offer.
   | { kind: "unpriced" }
+  // The share price is under review. Badge and deadline only: no strip and no
+  // computed note, because there is no rate to compute them from — and not
+  // stage 1's note either, because a depositor reading a row while the
+  // accountant is paused is owed the live cause rather than the standing one.
+  | { kind: "paused" }
   | {
       kind: "priced";
       // Which of the five is true. Exactly one, always — it is a sum type, not
@@ -135,6 +143,7 @@ export type RequestRowJudgement =
     };
 
 const UNPRICED: RequestRowJudgement = { kind: "unpriced" };
+const PAUSED: RequestRowJudgement = { kind: "paused" };
 
 // The badge per case (spec, request-row row). `under-asking` and `within` are
 // both a request with nothing wrong with it, so both keep stage 1's "Open".
@@ -185,11 +194,18 @@ export function buildRequestRow(
   // "Filling" and "Stopped" are stage 1's, and outrank any price: see `status`.
   if (status !== "open" && status !== "expired") return UNPRICED;
   if (offerShares <= 0n) return UNPRICED;
-  // Nothing to price FROM. `paused !== false` catches the pause and the unread
-  // flag together, because neither is permission to judge a request against
-  // this rate.
+
+  // The share price is under review, and this row says so — AFTER the three
+  // gates above, all of which outrank it: the 24h product is exempt by
+  // construction, and a request the solver is holding or the depositor stopped
+  // is not one to say anything new about, paused or not.
+  if (paused === true) return PAUSED;
+
+  // Nothing to price FROM, and nothing established about why. An unread pause
+  // flag is not permission to judge a request against this rate, and it is not
+  // the paused row either — nothing has been established yet.
   if (
-    paused !== false ||
+    paused === null ||
     history === null ||
     shareBalance === null ||
     navPerShare === null ||
@@ -251,8 +267,10 @@ export function buildRequestRow(
 
   // Which leaves the three notes that DO name what a post now would ask. With
   // nothing postable the row declines to say them — it would be naming a price
-  // no request could carry — and stage 1's row stands until the "When the
-  // widget cannot price" ticket gives that state a wording of its own.
+  // no request could carry — and stage 1's row stands. The spec writes no
+  // wording for this state and it needs none: a live request under a clamp is
+  // not a failure to read anything, and the withdraw panel's clamp card is
+  // where the cause and both remedies are already named in full.
   const note = namesNoPrice(comparison)
     ? ceilingNote(comparison, navPerShare, wantSymbol)
     : freshAsk === null

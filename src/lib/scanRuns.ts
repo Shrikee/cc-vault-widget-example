@@ -96,11 +96,34 @@ function begin(runs: ScanRuns, key: string, kind: ScanKind, from: bigint | null)
   };
 }
 
+// The wallet's whole history again, asked for BY HAND — the manual Try again a
+// degraded surface offers (spec §"When the widget cannot price").
+//
+// Unlike `startScan` it never declines: "one full scan per key" is a rule about
+// what the widget does on its own, and this is a person asking. The two states
+// it is offered in are a scan that failed (where `startScan` would in fact
+// start one) and a scan that SUCCEEDED under a ledger floor the widget could
+// not establish — there the key is scanned, the logs are held, and nothing but
+// this would ever read them again.
+//
+// It supersedes whatever was running and drops any queued tail: a full scan
+// from the floor reads everything a tail would have.
+//
+// The ADR-0001 stance is untouched. Nothing here is automatic; there is no
+// timer and no backoff, and this function is only ever reached from a control
+// a depositor pressed.
+export function rescan(runs: ScanRuns, key: string): ScanStep {
+  return begin(runs, key, "full", null);
+}
+
 // The wallet's one full scan, requested when the precondition first holds for
 // a key. A key already scanned (or being scanned) starts nothing.
 export function startScan(runs: ScanRuns, key: string): ScanStep {
   if (runs.key === key) return { runs, run: null };
-  return begin(runs, key, "full", null);
+  // The same full scan `rescan` above makes. The ONLY difference between the
+  // two is the line above — "one full scan per key" is a rule about what the
+  // widget does on its own, and asking by hand is not the widget.
+  return rescan(runs, key);
 }
 
 // Everything since the cursor, requested after the wallet's own deposit

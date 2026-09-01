@@ -93,6 +93,7 @@ export function App() {
     apys,
     position,
     depositHistory,
+    pricing,
     withdrawRequest,
   } = readsById(products, selectedId);
 
@@ -196,10 +197,11 @@ export function App() {
                     sharesRaw={position.sharesRaw}
                     shareValue={metrics.shareValue}
                     sharePriceRaw={metrics.sharePriceRaw}
-                    history={depositHistory.history ?? null}
+                    pricing={pricing}
                     unlockAt={position.unlockAt}
                     rightChain={rightChain}
                     paused={pause.withdrawalsPaused}
+                    pricingPaused={pause.pricingPaused}
                     request={withdrawRequest.request}
                     refetchRequest={withdrawRequest.refetch}
                     // Only ever this product's own ask: the selection has

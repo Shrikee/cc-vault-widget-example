@@ -272,23 +272,61 @@ describe("what the row will not price", () => {
     ).toBe("unpriced");
   });
 
-  it("prices nothing it has not read", () => {
+  it("prices nothing it has not read, and keeps stage 1's whole row", () => {
     const live = { ask: 1_001_000n, deadline: NOW + 5 * DAY };
     for (const missing of [
       { history: null },
       { shareBalance: null },
       { navPerShare: null },
       { navPerShare: 0n },
-      // The share price is under review: the rate the Lens serves is the
-      // number the operator is reviewing, so nothing is judged against it.
-      { paused: true },
       // Not read at all — a flag this card has not been handed is not a flag
-      // that says "running".
+      // that says "running", and it is not one that says "paused" either.
       { paused: null },
     ] satisfies Partial<RequestRowInputs>[]) {
       expect(buildRequestRow(unvested(1_001_000n, live, missing)).kind).toBe(
         "unpriced"
       );
+    }
+  });
+
+  it("says only the badge and the deadline while the share price is under review", () => {
+    // The spec's paused row (§"When the widget cannot price"): no strip, no
+    // computed note, and not stage 1's note either — the live cause is the
+    // pause, and the rate the Lens serves is the number the operator is
+    // reviewing, so nothing here is judged against it.
+    const live = { ask: 1_001_000n, deadline: NOW + 5 * DAY };
+    expect(buildRequestRow(unvested(1_001_000n, live, { paused: true }))).toEqual(
+      { kind: "paused" }
+    );
+  });
+
+  it("leaves the 24h product's row alone even while its accountant is paused", () => {
+    // Exempt by construction: nothing there is priced against a ceiling, so
+    // there is nothing for a pause to withdraw.
+    expect(
+      buildRequestRow(
+        unvested(
+          1_001_000n,
+          { ask: 1_001_000n, deadline: NOW + 5 * DAY },
+          { vestingGap: false, paused: true }
+        )
+      ).kind
+    ).toBe("unpriced");
+  });
+
+  it("leaves a held or stopped request alone while paused, too", () => {
+    // Stage 1's row outranks the pause the same way it outranks a price: a
+    // request the solver is holding is not one to say anything new about.
+    for (const status of ["solving", "stopped"] as const) {
+      expect(
+        buildRequestRow(
+          unvested(
+            1_001_000n,
+            { ask: 1_001_000n, deadline: NOW + 5 * DAY },
+            { status, paused: true }
+          )
+        ).kind
+      ).toBe("unpriced");
     }
   });
 
@@ -325,8 +363,8 @@ describe("what the row will not price", () => {
   it("says nothing at all about a request already inside a ceiling nothing can be posted under", () => {
     // The same clamp, over a request asking less than the ceiling: every note
     // left names what a post made now would ask, and today none can be made.
-    // Stage 1's row stands until the "when the widget cannot price" ticket
-    // gives this state a wording of its own.
+    // Stage 1's row stands — the spec writes no wording for this state, and the
+    // withdraw panel's clamp card already names the cause and both remedies.
     expect(
       buildRequestRow(
         inputs([deposit(ago(2), 1_000, 1_010_000n)], 1_030_000n, {

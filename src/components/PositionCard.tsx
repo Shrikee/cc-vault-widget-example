@@ -8,6 +8,7 @@ import { computeEarnings } from "../lib/apy";
 import { buildPositionExitLine } from "../lib/positionExit";
 import { spreadPpmOf } from "../lib/postingRule";
 import type { DepositHistory } from "../hooks/useDepositHistory";
+import type { PricedHistory } from "../lib/pricedHistory";
 import { formatDateTime, formatDuration } from "../lib/time";
 import { useNow } from "../hooks/useNow";
 import { Badge, Card, InlineError, Stat } from "./ui";
@@ -28,9 +29,18 @@ export interface ProductPosition {
   metrics: { shareValue: number | null; sharePriceRaw: bigint | null };
   // Earnings is derived here rather than passed in: the average deposit cost
   // comes from that product's own scan, the shares and share price the card
-  // already has. That same scan carries the holder history the sub-line prices
-  // against, on the products that have one.
+  // already has.
   depositHistory: DepositHistory;
+  // What the exit sub-line may be priced from, and why not when nothing may be
+  // (src/lib/pricedHistory.ts). Deliberately NOT taken off `depositHistory`
+  // above: the two answer different questions over the same scan — a wallet
+  // that was sent its shares has no earnings and an entitlement like anyone
+  // else — and the ledger floor this one also depends on is not the scan's at
+  // all.
+  pricing: PricedHistory;
+  // Whether this product's share price is under review. This product's own
+  // flag, never the selected product's: the card shows both positions at once.
+  pause: { pricingPaused: boolean | null };
 }
 
 // Every product the depositor holds, in one card.
@@ -78,6 +88,8 @@ function ProductPositionBlock({
     position: { shares, sharesRaw, unlockAt },
     metrics: { shareValue, sharePriceRaw },
     depositHistory,
+    pricing,
+    pause,
   },
   now,
 }: {
@@ -139,14 +151,15 @@ function ProductPositionBlock({
   // that was SENT its shares has no deposits and so no earnings — it keeps the
   // "—" beside that word — and it has an entitlement like anyone else.
   //
-  // Two states this line has no wording for yet: a history that could not be
-  // read, and a paused accountant. Both belong to the "when the widget cannot
-  // price" ticket (spec §"When the widget cannot price"), which lands this
-  // card's sentence for each; until then the model returns nothing for the
-  // first and the pause flag is not threaded here at all.
+  // Two states have a sentence of their own rather than a figure — a paused
+  // accountant and a history that could not be read (spec §"When the widget
+  // cannot price") — and the model owns both, along with the states it still
+  // answers with silence.
   const exitLine = hasVestingGap(vault)
     ? buildPositionExitLine({
-        history: depositHistory.history ?? null,
+        history: pricing.history,
+        unreadable: pricing.unreadable,
+        paused: pause.pricingPaused,
         shareBalance: sharesRaw,
         navPerShare: sharePriceRaw,
         now,

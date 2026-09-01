@@ -9,20 +9,55 @@ import type { QuoteCard as Card } from "../lib/withdrawQuote";
 // the two widths of the proportion bar, the two tiles, the dots before the
 // legend and the lot lines, and the button the clamp's offer fills.
 //
-// Which is also why the card carries four shapes rather than one. The question
-// a depositor arrives with — "what do I get if I leave now?" — has four
-// different answers on this product: a price, a refusal, "not yet", and
-// nothing typed. Each is a different block, and none of them is a row.
+// Which is also why the card carries six shapes rather than one. The question
+// a depositor arrives with — "what do I get if I leave now?" — has six
+// different answers on this product: a price, a refusal, "not yet", "not while
+// the price is under review", "we couldn't read your history", and nothing
+// typed. Each is a different block, and none of them is a row.
 
 export function QuoteCard({
   card,
   // Fills the amount box with the clamp's offer. The only control the card has.
   onUseOffer,
+  // Re-reads the wallet's history from the ledger floor, and re-checks the
+  // floor itself. The card's other control, and the only retry in the widget:
+  // nothing here is on a timer (ADR-0001).
+  onTryAgain,
 }: {
   card: Card;
   onUseOffer: (amount: string) => void;
+  onTryAgain: () => void;
 }) {
   if (card.kind === "none") return null;
+
+  // The share price is under review. Nothing to price and nothing to post, so
+  // the card has no control at all — the button below it is already disabled by
+  // stage 1's own gate.
+  if (card.kind === "paused") {
+    return (
+      <div className="notice notice--warning">
+        <strong>{card.headline}</strong>
+        <span>{card.body}</span>
+      </div>
+    );
+  }
+
+  // The history could not be read, or its ledger floor could not be
+  // established. Nothing is priced — and posting stays open, which is what the
+  // body discloses, so this is a warning rather than a refusal.
+  if (card.kind === "unreadable") {
+    return (
+      <div className="notice notice--warning">
+        <strong>{card.headline}</strong>
+        <span>{card.body}</span>
+        <span className="quote__remedy">
+          <button type="button" className="linklike" onClick={onTryAgain}>
+            {card.retryLabel}
+          </button>
+        </span>
+      </div>
+    );
+  }
 
   // The lock, which is stage 1's own notice with the quote's explanation of
   // itself added: nothing to post, so nothing to quote.

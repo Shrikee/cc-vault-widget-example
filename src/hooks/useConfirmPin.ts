@@ -73,6 +73,11 @@ export interface ConfirmPinControls extends ConfirmPinState {
   // Resolves with what to post, or null when it re-pinned instead (or was
   // closed) — in which case nothing may be signed.
   confirm: (offerShares: bigint) => Promise<PostablePost | null>;
+  // Pin again, over the same shares at the same spread — the manual Try again
+  // the failed-tail refusal offers (spec §"When the widget cannot price"). A
+  // no-op with nothing being pinned, so a stray press can never start a read
+  // for a modal that is closed.
+  retry: () => void;
 }
 
 const CLOSED: ConfirmPinState = { status: "closed", pin: null, notice: null };
@@ -259,5 +264,13 @@ export function useConfirmPin(
     [client, vault, address, pin]
   );
 
-  return { ...state, open, close, confirm };
+  // The same request, read again. `pin` clears the notice, which is right: the
+  // depositor asked for this one, so there is nothing to explain about why the
+  // figures moved.
+  const retry = useCallback(() => {
+    const req = request.current;
+    if (req) void pin(req, null);
+  }, [pin]);
+
+  return { ...state, open, close, confirm, retry };
 }

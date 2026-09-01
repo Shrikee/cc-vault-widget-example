@@ -27,6 +27,7 @@ import type {
   HolderEvent,
 } from "../entitlement/entitlement";
 import { largestPostableShares, lotListing } from "./lotListing";
+import type { HistoryUnreadable } from "./pricedHistory";
 import { askPrice, payout, postedDiscount, requiredSpread } from "./postingRule";
 import { formatWant, formatShares, formatSpread } from "./figures";
 
@@ -38,6 +39,22 @@ export interface PositionExitInputs {
   // while it has not landed, or when it could not be read; nothing is priced
   // from a history the widget does not have.
   history: readonly HolderEvent[] | null;
+  // Why that history is null, when the answer is "it could not be read" rather
+  // than "not yet" — a failed scan, or a ledger floor the widget cannot
+  // establish (./pricedHistory.ts). The SAME shape every priced surface takes,
+  // passed straight through from `PricedHistory.unreadable`, so no caller has
+  // to convert it and no two surfaces can disagree about what it means.
+  //
+  // This card reads only whether it is null: it has one sentence either way,
+  // and naming the reason is the job of the surface that offers the retry.
+  unreadable: HistoryUnreadable | null;
+  // The accountant's pause flag for this product: true while the share price is
+  // under review, false while it is not, and null until the poll has answered
+  // at all. Null is NOT permission to price — the auto-pause stores the
+  // out-of-bounds rate before setting the flag, so an unread flag over a rate
+  // that decodes is exactly the case this exists to catch — and it is not the
+  // paused wording either, because nothing has been established yet.
+  paused: boolean | null;
   // The raw balance, to the wei. This is the quoted amount: the card offers no
   // box to type a smaller one into.
   shareBalance: bigint | null;
@@ -67,12 +84,13 @@ type EntitlementInputs = Omit<EntitlementQuery, "offerShares">;
 // The sub-line, or `null` where there is nothing to say.
 //
 // Total over the states this surface has copy for: the quote (vesting or fully
-// vested), the clamp, and the lock. The states it does NOT have copy for yet —
-// an unreadable history and a paused accountant — return `null`, and their
-// wordings land with the "when the widget cannot price" ticket (spec §"When the
-// widget cannot price", which gives the position card a sentence for each).
-// Silence is the one thing that cannot be wrong in the meantime: no figure on
-// screen is better than a figure priced off a read the widget does not have.
+// vested), the clamp, the lock, and the two the spec gives this card a sentence
+// of its own for — a paused accountant and an unreadable history (§"When the
+// widget cannot price"). What still returns `null` is a wallet holding none of
+// the product, and a read that has not landed yet: nothing has failed there, so
+// a sentence about a failure would not be true. Silence is the one thing that
+// cannot be wrong — no figure on screen is better than a figure priced off a
+// read the widget does not have.
 //
 // The caller decides whether this product prices exits at all — the gate is the
 // vesting gap, never the vault id (src/lib/vaultRegistry.ts, `hasVestingGap`).
@@ -81,6 +99,8 @@ export function buildPositionExitLine(
 ): string | null {
   const {
     history,
+    unreadable,
+    paused,
     shareBalance,
     navPerShare,
     now,
@@ -92,13 +112,28 @@ export function buildPositionExitLine(
     wantSymbol,
   } = inputs;
 
-  // Nothing to price, or nothing to price FROM. A wallet holding none of this
-  // product is the first of those: it has no exit to quote, and "≈ 0.00 USDT"
-  // is a sentence about nothing.
+  // NOTHING TO PRICE comes first, and outranks everything below it. A wallet
+  // holding none of this product has no exit to describe: "≈ 0.00 USDT" is a
+  // sentence about nothing, and so is "Redeemable today" over a zero balance —
+  // the degraded lines are about a holding, and there is none.
+  if (shareBalance === null || shareBalance <= 0n) return null;
+
+  // Nothing to price FROM, in the two states this card has words for. The order
+  // is the quote card's, and for the same reason: the pause is the live
+  // operator state and the one that also closes the post, so it is what a
+  // holder is told when both are true.
+  if (paused === true)
+    return "Redeemable today — not while the share price is under review.";
+  if (unreadable !== null)
+    return "Redeemable today — couldn't read your history.";
+
+  // And the states it has no words for, because nothing has failed: a read
+  // still in flight, including a pause flag nobody has answered for yet.
+  // Silence is the one thing that cannot be wrong here — no figure on screen is
+  // better than a figure priced off a read the widget does not have.
   if (
+    paused === null ||
     history === null ||
-    shareBalance === null ||
-    shareBalance <= 0n ||
     navPerShare === null ||
     navPerShare <= 0n
   )

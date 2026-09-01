@@ -31,6 +31,7 @@ import {
   formatShares,
   formatSpread,
   formatWant,
+  quotedReason,
 } from "./figures";
 import { lotListing } from "./lotListing";
 import {
@@ -190,6 +191,14 @@ export type ConfirmPin =
       cause: PinFailure;
       headline: string;
       body: string;
+      // The manual re-pin, on the one refusal the spec gives a control to: a
+      // failed tail is a read that may well land on a second ask, and the
+      // depositor is standing at a modal they opened on purpose. Null on the
+      // other three, and null for a REASON rather than an omission — a paused
+      // accountant, a balance that no longer covers and an amount past the 1%
+      // maximum are all answers, and asking the chain again would return the
+      // same one.
+      retryLabel: string | null;
     };
 
 // The one sentence under every pinned modal. It promises nothing, and it says
@@ -201,19 +210,31 @@ const FOOTER =
 
 // Every refusal ends the same way, because it is the only thing a depositor
 // standing at a Confirm button needs to be certain of.
+//
+// TWO SPELLINGS, deliberately. The three tiles the spec writes out end "Nothing
+// was posted."; the re-pin notices below it, which are a different surface —
+// a line above figures that ARE pinned — keep "Nothing has been posted." Both
+// are verbatim where the spec gives them, and only one is ever on screen at a
+// time.
+const NOTHING_WAS_POSTED = "Nothing was posted.";
 const NOTHING_POSTED = "Nothing has been posted.";
 
-// FAIL SAFE. The three pin failures the spec names (paused, failed tail, short
-// balance) get their VERBATIM tiles in the later "when the widget cannot price"
-// ticket; until then each names its cause plainly, shows no figure that was not
-// pinned, replaces Confirm with Close, and posts nothing. The fourth — a
+// FAIL SAFE. Each refusal names its cause, shows no figure that was not pinned,
+// replaces Confirm with Close, and posts nothing. Three of the four are the
+// spec's verbatim tiles (§"When the widget cannot price"); the fourth — a
 // required spread past the contract's maximum — is the quote card's clamp
-// arriving a moment late, and is refused the same way.
+// arriving a moment late, has no wording of its own in the spec, and is refused
+// in the clamp's own terms.
+//
+// `headline` is the cause and `body` the assurance, which is layout rather than
+// two sentences: the modal renders them as one line, and ./confirmPin.test.ts
+// asserts the pair joined, against the spec's sentence.
 const cannotPin = (
   cause: PinFailure,
   headline: string,
-  body: string
-): ConfirmPin => ({ kind: "cannot-pin", cause, headline, body });
+  body: string,
+  retryLabel: string | null = null
+): ConfirmPin => ({ kind: "cannot-pin", cause, headline, body, retryLabel });
 
 /**
  * The modal's model for one pinned post.
@@ -236,18 +257,17 @@ export function buildConfirmPin(input: PinInputs): ConfirmPin {
   if (reads.kind === "paused")
     return cannotPin(
       "paused",
-      "The share price is under review.",
-      `The accountant is not pricing this product right now — its guarded ` +
-        `rate read reverts while it is paused — so there is no share price to ` +
-        `pin this request against. ${NOTHING_POSTED}`
+      `Couldn't pin the figures — the share price is under review (the ` +
+        `accountant is paused).`,
+      NOTHING_WAS_POSTED
     );
 
   if (reads.kind === "unread")
     return cannotPin(
       "unread",
-      "The figures could not be pinned.",
-      `The pre-post read did not complete (${reads.detail}), so nothing was ` +
-        `pinned to post from. ${NOTHING_POSTED}`
+      `Couldn't re-read your history — ${quotedReason(reads.detail)}.`,
+      NOTHING_WAS_POSTED,
+      "Try again"
     );
 
   const { blockNumber, now, navPerShare, shareBalance, rateUpdatedAt, history } =
@@ -261,10 +281,12 @@ export function buildConfirmPin(input: PinInputs): ConfirmPin {
   if (shareBalance < offerShares)
     return cannotPin(
       "balance-short",
-      "Your share balance no longer covers this amount.",
-      `At block ${formatCount(blockNumber)} you hold ` +
-        `${formatShares(shareBalance, shareDecimals)} ${shareSymbol}, and this ` +
-        `request would offer ${shares} ${shareSymbol}. ${NOTHING_POSTED}`
+      // Both figures are the PIN's own — the balance at the block it read, and
+      // the amount that was entered. The block number is not named: the spec's
+      // sentence is about what the depositor holds now, and it reads as one.
+      `Your balance is now ${formatShares(shareBalance, shareDecimals)} ` +
+        `${shareSymbol}, less than the ${shares} you entered.`,
+      NOTHING_WAS_POSTED
     );
 
   // The recompute, over the exact shares and against the pinned block's own

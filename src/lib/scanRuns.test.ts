@@ -15,6 +15,7 @@ import {
   forgetScans,
   isCurrent,
   requestTail,
+  rescan,
   scanKey,
   settleScan,
   startScan,
@@ -54,6 +55,55 @@ describe("a failed full scan (spec §5.5, §5.7)", () => {
     const viaTail = requestTail(failed.runs, KEY_A);
     expect(viaTail.run?.kind).toBe("full");
     expect(viaTail.run?.from).toBeNull();
+  });
+});
+
+// The manual Try again (spec §"When the widget cannot price"). The ADR-0001
+// stance is unchanged — nothing retries on a timer — so this is the ONE way a
+// scan is asked for again by hand, and it must work in the two states where
+// the surfaces offer it: after a failure, and after a scan that succeeded but
+// whose ledger floor could not be established.
+describe("a re-scan asked for by hand", () => {
+  it("reads the wallet from the ledger floor again", () => {
+    const again = rescan(NO_SCANS, KEY_A);
+    expect(started(again).kind).toBe("full");
+    expect(started(again).from).toBeNull();
+  });
+
+  it("scans again even where a scan already succeeded", () => {
+    // The difference from startScan, and the whole point: a key already scanned
+    // declines a start, because one full scan per wallet is the rule. Asking by
+    // hand is not that trigger — the floor check can fail over a scan that went
+    // perfectly, and Try again has to mean something there.
+    const settled = settleScan(
+      startScan(NO_SCANS, KEY_A).runs,
+      started(startScan(NO_SCANS, KEY_A)),
+      500n
+    );
+    expect(startScan(settled.runs, KEY_A).run).toBeNull();
+    const again = rescan(settled.runs, KEY_A);
+    expect(started(again).kind).toBe("full");
+    // From the floor, not from the cursor: a re-scan replaces what was held
+    // rather than folding into it.
+    expect(started(again).from).toBeNull();
+    expect(again.runs.cursor).toBeNull();
+  });
+
+  it("supersedes a scan still in flight", () => {
+    const first = startScan(NO_SCANS, KEY_A);
+    const again = rescan(first.runs, KEY_A);
+    expect(isCurrent(again.runs, started(again))).toBe(true);
+    // The overtaken run may touch nothing when it finally lands.
+    expect(isCurrent(again.runs, started(first))).toBe(false);
+  });
+
+  it("drops a tail queued behind the scan it replaces", () => {
+    // A full scan from the floor reads everything that tail would have, so
+    // running it afterwards would re-read the same blocks for nothing.
+    const first = startScan(NO_SCANS, KEY_A);
+    const queued = requestTail(first.runs, KEY_A);
+    expect(queued.runs.pendingTail).toBe(true);
+    expect(rescan(queued.runs, KEY_A).runs.pendingTail).toBe(false);
   });
 });
 

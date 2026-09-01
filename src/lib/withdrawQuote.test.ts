@@ -59,6 +59,7 @@ function inputs(
     now: NOW,
     unlockAt: NOW - DAY,
     paused: false,
+    unreadable: null,
     vestingSeconds: VESTING,
     shareLockSeconds: SHARE_LOCK,
     shareDecimals: 18,
@@ -361,34 +362,155 @@ describe("the shares that would post", () => {
 
 // Nothing to price FROM, which is not the same as nothing to price. Posting
 // stays open at the holder's own spread — the widget never gates a post on its
-// own reads — so the panel is told it owes a disclosure instead of a figure.
-// The wordings for these states are the "when the widget cannot price" ticket's;
-// what this ticket owes is that no WRONG figure stands in for them.
+// own reads — so what these states change is what the card SAYS, never whether
+// a request can go out. Every wording below is the spec's, verbatim
+// (§"When the widget cannot price — wordings and behaviour").
 describe("when nothing can be priced", () => {
-  const cases: [string, Partial<QuoteInputs>][] = [
-    ["the share price is under review", { paused: true }],
-    ["the history has not been read", { history: null }],
-    ["the balance has not been read", { shareBalance: null }],
-    ["the share price has not been read", { navPerShare: null }],
-  ];
+  const broken = (extra: Partial<QuoteInputs>): WithdrawQuote =>
+    buildWithdrawQuote(
+      inputs([deposit(ago(45), 6_000, 1_000_000n)], 1_001_000n, "6000", extra)
+    );
 
-  for (const [why, broken] of cases) {
-    it(`says so, and quotes nothing, when ${why}`, () => {
-      const quote = buildWithdrawQuote(inputs(
-        [deposit(ago(45), 6_000, 1_000_000n)],
-        1_001_000n,
-        "6000",
-        broken
-      ));
-      expect(quote.cannotPrice).toBe(true);
-      expect(quote.card.kind).toBe("none");
-      expect(quote.receive).toBe("—");
-      expect(quote.spread).toBe("0.10% (default)");
-      // Never refused: the widget refuses only what it can ESTABLISH the solver
-      // would skip, and it has established nothing here.
-      expect(quote.refused).toBe(false);
+  // What every one of them leaves in the rows: no figure, and the holder's own
+  // spread — which is what a request posted anyway would still carry.
+  const pricesNothing = (quote: WithdrawQuote) => {
+    expect(quote.cannotPrice).toBe(true);
+    expect(quote.receive).toBe("—");
+    expect(quote.spread).toBe("0.10% (default)");
+    expect(quote.post).toBeNull();
+    // Never refused: the widget refuses only what it can ESTABLISH the solver
+    // would skip, and it has established nothing here.
+    expect(quote.refused).toBe(false);
+  };
+
+  describe("the accountant is paused", () => {
+    const quote = broken({ paused: true });
+
+    it("says the share price is under review, and that nothing can be posted", () => {
+      expect(quote.card).toEqual({
+        kind: "paused",
+        headline: "Redemptions are paused.",
+        body:
+          "The share price is under review by the operator, so nothing is " +
+          "priced and no request can be posted until it resumes.",
+      });
     });
-  }
+
+    it("leaves the rows at a dash and the holder's own spread", () => {
+      pricesNothing(quote);
+    });
+
+    it("owes no generic vesting notice — the card is the whole disclosure", () => {
+      expect(quote.discloseVesting).toBe(false);
+    });
+  });
+
+  describe("the history could not be read", () => {
+    const quote = broken({
+      unreadable: { kind: "read-failed", detail: "chunk 41 timed out" },
+    });
+
+    it("names the chain's own reason, and offers a manual re-scan", () => {
+      expect(quote.card).toEqual({
+        kind: "unreadable",
+        headline:
+          "Couldn't read your history from the chain — chunk 41 timed out.",
+        body:
+          "Nothing is priced. A request posts at your redemption spread and, " +
+          "on this product, may be passed over if your shares haven't " +
+          "finished vesting.",
+        retryLabel: "Try again",
+      });
+    });
+
+    it("prices nothing, and leaves a post open at the holder's own spread", () => {
+      pricesNothing(quote);
+      expect(quote.discloseVesting).toBe(false);
+    });
+
+    it("does not double a reason that ends in its own full stop", () => {
+      const card = broken({
+        unreadable: {
+          kind: "read-failed",
+          detail: "HTTP request failed.",
+        },
+      }).card;
+      if (card.kind !== "unreadable") throw new Error("expected the unreadable card");
+      expect(card.headline).toBe(
+        "Couldn't read your history from the chain — HTTP request failed."
+      );
+    });
+  });
+
+  describe("the registry's ledger floor is too young", () => {
+    // The spec's own live figures: the 30d floor, fifteen days into a thirty-day
+    // term (§"The runtime ledger-floor check").
+    const quote = broken({
+      unreadable: {
+        kind: "floor-too-young",
+        floorBlock: 92_416_354n,
+        ageSeconds: 15 * DAY,
+      },
+    });
+
+    it("blames the configuration, in the block and the age it read", () => {
+      const { card } = quote;
+      if (card.kind !== "unreadable") throw new Error("expected the unreadable card");
+      expect(card.headline).toBe(
+        "Couldn't price from your history — the vault registry's ledger floor " +
+          "(block 92,416,354, 15 days old) is too young for a 30-day term. " +
+          "The widget's configuration needs updating."
+      );
+    });
+
+    it("degrades exactly as an unreadable history does, Try again and all", () => {
+      const { card } = quote;
+      if (card.kind !== "unreadable") throw new Error("expected the unreadable card");
+      expect(card.body).toBe(
+        "Nothing is priced. A request posts at your redemption spread and, " +
+          "on this product, may be passed over if your shares haven't " +
+          "finished vesting."
+      );
+      expect(card.retryLabel).toBe("Try again");
+      pricesNothing(quote);
+    });
+
+    it("says the age in whole days, never rounding a floor older than it is", () => {
+      const { card } = broken({
+        unreadable: {
+          kind: "floor-too-young",
+          floorBlock: 92_416_354n,
+          ageSeconds: Math.round(15.9 * DAY),
+        },
+      });
+      if (card.kind !== "unreadable") throw new Error("expected the unreadable card");
+      expect(card.headline).toContain("(block 92,416,354, 15 days old)");
+    });
+  });
+
+  describe("a read that has simply not landed yet", () => {
+    const cases: [string, Partial<QuoteInputs>][] = [
+      ["the history has not been read", { history: null }],
+      ["the balance has not been read", { shareBalance: null }],
+      ["the share price has not been read", { navPerShare: null }],
+      // An unread pause flag is not permission to price — the auto-pause stores
+      // the out-of-bounds rate BEFORE setting the flag — and it is not the
+      // paused card either, because nothing has been established.
+      ["the pause flag has not been read", { paused: null }],
+    ];
+
+    for (const [why, extra] of cases) {
+      it(`says nothing of its own, and owes the generic notice, when ${why}`, () => {
+        const quote = broken(extra);
+        // No wording: "couldn't read your history" over a scan still running is
+        // a sentence that is not true yet. The panel's stage-1 vesting notice
+        // stands in, which is what `discloseVesting` asks for.
+        expect(quote.card.kind).toBe("none");
+        expect(quote.discloseVesting).toBe(true);
+        pricesNothing(quote);
+      });
+    }
+  });
 
   it("is not what an empty amount box means", () => {
     // Nothing is priced there either, but nothing was asked for, no wrong
@@ -396,19 +518,44 @@ describe("when nothing can be priced", () => {
     const quote = buildWithdrawQuote(mixed(""));
     expect(quote.card.kind).toBe("none");
     expect(quote.cannotPrice).toBe(false);
+    expect(quote.discloseVesting).toBe(false);
   });
 
-  it("keeps the lock notice ahead of the pause", () => {
-    // A locked holder is told about the lock, not about the pause: the lock is
-    // the one they can do something about, and it needs no price to say.
-    const quote = buildWithdrawQuote(
-      inputs([deposit(NOW - 3_600, 5_000, 1_000_000n)], 1_000_400n, "5000", {
-        unlockAt: NOW + 18 * 3_600,
-        paused: true,
-      })
-    );
-    expect(quote.card.kind).toBe("locked");
-    expect(quote.cannotPrice).toBe(false);
+  it("keeps the lock notice ahead of both of them", () => {
+    // A locked holder is told about the lock, not about the pause or the failed
+    // read: the lock is the one they can do something about, and it needs no
+    // price to say. There is nothing to post while it holds either, so no
+    // disclosure about posting is owed.
+    for (const extra of [
+      { paused: true },
+      {
+        unreadable: {
+          kind: "read-failed" as const,
+          detail: "chunk 41 timed out",
+        },
+      },
+    ]) {
+      const quote = buildWithdrawQuote(
+        inputs([deposit(NOW - 3_600, 5_000, 1_000_000n)], 1_000_400n, "5000", {
+          unlockAt: NOW + 18 * 3_600,
+          ...extra,
+        })
+      );
+      expect(quote.card.kind).toBe("locked");
+      expect(quote.cannotPrice).toBe(false);
+      expect(quote.discloseVesting).toBe(false);
+    }
+  });
+
+  it("answers the pause before a failed read, when both are true", () => {
+    // The pause is the live operator state and it also closes the post; the
+    // failed read leaves posting open. Saying the wrong one of those two would
+    // send a depositor to a button that is disabled.
+    const quote = broken({
+      paused: true,
+      unreadable: { kind: "read-failed", detail: "chunk 41 timed out" },
+    });
+    expect(quote.card.kind).toBe("paused");
   });
 });
 

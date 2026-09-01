@@ -157,17 +157,15 @@ export const lensCalls = {
 //   • `accountantState` carries `lastUpdateTimestamp` and `isPaused`, the two
 //     the Confirm re-check compares against.
 //
-//     A SECOND COPY of this twelve-field struct lives in
-//     src/hooks/usePauseStatus.ts, which polls it for the pause banner. That is
-//     a duplication and it is named here rather than excused: the accountant's
-//     layout is one fact, and two spellings of it can drift silently — the
-//     fields are positional, so a struct change makes the stale copy decode
-//     the WRONG field rather than fail. They must be changed together until
-//     the pause surfaces are rewritten (the "when the widget cannot price"
-//     ticket owns every one of them, and is where the two should become one).
-//     What is not the reason: the poll. The pin reads this at a pinned block
-//     and the banner reads it every 30 seconds, but that is a difference of
-//     CALL, not of fragment.
+//     THIS IS THE ONLY SPELLING of the twelve-field struct. It used to be
+//     written twice — src/hooks/usePauseStatus.ts kept its own copy for the
+//     pause banner — and that was a silent drift hazard rather than a
+//     duplication anyone would notice: the fields are positional, so a struct
+//     change makes a stale copy decode the WRONG field rather than fail. The
+//     banner reads this one now, through the two accessors below. What was
+//     never the reason to have two: the poll. The pin reads this at a pinned
+//     block and the banner every 30 seconds, but that is a difference of CALL,
+//     not of fragment.
 //   • `balanceOf` is the vault share token's own, so the balance is pinned to
 //     the same block as the rate with no third contract in the path.
 export const ACCOUNTANT_ABI = [
@@ -206,6 +204,18 @@ export const SHARE_TOKEN_ABI = [
     name: "balanceOf",
     stateMutability: "view",
     inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "shares", type: "uint256" }],
+  },
+  {
+    // The ledger floor's supply arm (src/lib/floorSoundness.ts): how many
+    // shares existed at `eventsFromBlock − 1`. An ARCHIVE read, made once per
+    // vesting-gap product per session and only when the floor is younger than
+    // the vesting term — which is why it is a call at a past block rather than
+    // anything the widget polls.
+    type: "function",
+    name: "totalSupply",
+    stateMutability: "view",
+    inputs: [],
     outputs: [{ name: "shares", type: "uint256" }],
   },
 ] as const;

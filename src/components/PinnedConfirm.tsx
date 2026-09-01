@@ -22,10 +22,14 @@ export function PinnedConfirm({
   pin,
   notice,
   note,
+  onTryAgain,
   children,
 }: {
   status: PinStatus;
   pin: ConfirmPin | null;
+  // Pin again, over the same shares. Offered on the one refusal that carries a
+  // label for it — the model decides which, never this component.
+  onTryAgain: () => void;
   // Why these figures are not the ones last looked at — a re-check that refused
   // to post and pinned again.
   notice: string | null;
@@ -54,6 +58,17 @@ export function PinnedConfirm({
         <div className="notice notice--danger">
           <strong>{pin.headline}</strong>
           <span>{pin.body}</span>
+          {/* Only where the model gave one: a read that failed may land on a
+              second ask, and the other refusals are answers that would not
+              change. Confirm is replaced by Close either way — this re-reads,
+              it does not post. */}
+          {pin.retryLabel && (
+            <span className="quote__remedy">
+              <button type="button" className="linklike" onClick={onTryAgain}>
+                {pin.retryLabel}
+              </button>
+            </span>
+          )}
         </div>
       )}
 

@@ -1,5 +1,5 @@
 {
-  "_note": "Verified against the live Polygon contracts on 2026-08-28 at chain head 92,835,789. The four values no chain read can confirm - addresses.queue, addresses.solver, eventsFromBlock and vestingSeconds - carry their source repository and file in src/config/vaults.ts. Shaped like a vault entry in the solver service's roster (vault-solver-service, config.json) so the two diff by eye; the nested ui block is what this widget alone needs.",
+  "_note": "Verified against the live Polygon contracts on 2026-08-28 at chain head 92,835,789. The four values no chain read can confirm - addresses.queue, addresses.solver, eventsFromBlock and vestingSeconds - carry their source repository and file in src/config/vaults.ts. Shaped like a vault entry in the solver service's roster (vault-solver-service, config.json) so the two diff by eye; the nested ui block is what this widget alone needs. eventsFromBlock may only be raised to a block at least vestingSeconds old, or one below which the vault held no shares.",
   "chain": {
     "key": "polygon",
     "chainId": 137,

@@ -2,11 +2,11 @@ import { useState } from "react";
 import { Contract, type JsonRpcSigner } from "ethers";
 
 import { explorerTx } from "../config/chain";
-import type { DepositHistory } from "../hooks/useDepositHistory";
 import type { PauseStatus } from "../hooks/usePauseStatus";
 import type { UserPosition } from "../hooks/useUserPosition";
 import type { VaultMetrics } from "../hooks/useVaultMetrics";
 import type { WithdrawRequestState } from "../hooks/useWithdrawRequest";
+import type { PricedHistory } from "../lib/pricedHistory";
 import type { RequestRepost } from "../lib/requestRow";
 import type { Vault } from "../lib/vaultRegistry";
 import { RequestRow } from "./RequestRow";
@@ -47,7 +47,11 @@ export interface ProductRedemption {
   // under review. THIS product's, always — the card is outside the selection,
   // and a row that borrowed the selected product's flags would judge one
   // product's request by another's reads.
-  depositHistory: DepositHistory;
+  // What the row's judgement may be priced from, and why not when nothing may
+  // be — this product's scan AND this product's ledger floor, decided once
+  // (src/lib/pricedHistory.ts). The scan itself is not taken: nothing in this
+  // card shows an earnings figure.
+  pricing: PricedHistory;
   position: UserPosition;
   metrics: VaultMetrics;
   pause: PauseStatus;
@@ -98,7 +102,7 @@ export function RedemptionsCard({
             // none: it is handed what this product knows, or the nulls that say
             // it does not know yet.
             reads: {
-              history: product.depositHistory.history ?? null,
+              history: product.pricing.history,
               shareBalance: product.position.sharesRaw,
               navPerShare: product.metrics.sharePriceRaw,
               // The accountant's flag, read for this product and no other, and

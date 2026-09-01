@@ -84,6 +84,11 @@ export function RequestRow({
     wantSymbol,
   });
   const priced = judged.kind === "priced" ? judged : null;
+  // The share price is under review: the badge and the deadline, and nothing
+  // else (spec §"When the widget cannot price"). Not stage 1's sub-line and not
+  // stage 1's note — both are about why a request may sit open on a vesting
+  // product, and while the accountant is paused that is not the live reason.
+  const pricingPaused = judged.kind === "paused";
   // Pulled out of the judgement so the button below reads from a `const` the
   // narrowing survives into its own handler.
   const repost = priced?.repost ?? null;
@@ -153,6 +158,8 @@ export function RequestRow({
             <p className="request__note">{priced.note}</p>
             {deadline}
           </>
+        ) : pricingPaused ? (
+          deadline
         ) : (
           <>
             <div className="request__sub">

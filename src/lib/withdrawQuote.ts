@@ -37,11 +37,14 @@ import {
   type LotView,
 } from "./lotListing";
 import {
+  formatCount,
   formatPrice,
   formatShares,
   formatSpread,
   formatWant,
+  quotedReason,
 } from "./figures";
+import type { HistoryUnreadable } from "./pricedHistory";
 import {
   amountStringOf,
   askPrice,
@@ -62,6 +65,10 @@ export interface QuoteInputs {
   // while it has not landed, or when it could not be read; nothing is priced
   // from a history the widget does not have.
   history: readonly HolderEvent[] | null;
+  // Why that history is null, when the answer is "it could not be read" rather
+  // than "not yet" (./pricedHistory.ts). The two absences get different cards,
+  // because only one of them is something to tell a depositor about.
+  unreadable: HistoryUnreadable | null;
   // The raw balance, to the wei: what MAX offers and what the quote is capped
   // to.
   shareBalance: bigint | null;
@@ -72,9 +79,17 @@ export interface QuoteInputs {
   now: number;
   // When the share lock ends. Nothing is priced before it.
   unlockAt: number | null;
-  // The accountant's pause flag. The share price is under review while it is
-  // set, so nothing is priced from it.
-  paused: boolean;
+  // The ACCOUNTANT's pause flag, and only the accountant's: true while the
+  // share price is under review, false while it is not, and null until the poll
+  // has answered at all. Nothing is priced from a rate under review, and an
+  // unread flag is not permission to price either — the auto-pause stores the
+  // out-of-bounds rate BEFORE setting the flag, so a rate that decodes beside a
+  // flag nobody has read is exactly the case this exists to catch.
+  //
+  // NOT the panel's own posting gate, which is also true of a paused queue: a
+  // queue that will not take a request has no opinion about the share price,
+  // and the card must not say the price is under review when it is not.
+  paused: boolean | null;
   vestingSeconds: number;
   shareLockSeconds: number;
   shareDecimals: number;
@@ -131,6 +146,24 @@ export type QuoteCard =
   // The share lock has not ended: there is nothing to post, so there is
   // nothing to quote. The card IS the lock notice — stage 1's separate one goes.
   | { kind: "locked"; headline: string; body: string }
+  // The accountant is paused. Nothing on this product has a share price while
+  // it holds, so nothing is priced AND nothing can be posted — the one state
+  // where those two are the same answer, because the gate is the contract's
+  // rather than the widget's reading of it.
+  | { kind: "paused"; headline: string; body: string }
+  // The history could not be read, or the ledger floor it would be read from
+  // cannot be established. Nothing is priced — and posting stays open at the
+  // holder's own spread, disclosed, because the widget has established nothing
+  // the solver would skip.
+  | {
+      kind: "unreadable";
+      headline: string;
+      body: string;
+      // The manual re-scan. A LABEL rather than a flag because it is copy: the
+      // ADR-0001 stance is that a failed read is retried when a person asks and
+      // never on a timer, so the control that asks is part of the wording.
+      retryLabel: string;
+    }
   // The 1% clamp: the entitlement for this amount is further below the share
   // price than the contract's maximum redemption spread, so any request for it
   // would be passed over. The card is the refusal, and the post is disabled.
@@ -181,17 +214,30 @@ export interface WithdrawQuote {
   post: PostablePost | null;
   // The 1% clamp: the post button is disabled, with no override.
   refused: boolean;
-  // Nothing could be priced: the share price is under review, or the history,
-  // balance or rate this prices from has not been read. Posting stays open at
-  // the holder's own spread — the widget never gates a post on its own reads —
-  // so the panel must DISCLOSE the vesting cap some other way, which until the
-  // "when the widget cannot price" ticket lands its wordings is stage 1's
-  // vesting notice.
+  // Nothing could be priced: the share price is under review, the history could
+  // not be read, or one of the reads this prices from has not landed. Posting
+  // stays open at the holder's own spread in every one of them except the pause
+  // — the widget never gates a post on its own READS, and the pause is the
+  // contract's gate rather than a reading (spec §"When the widget cannot
+  // price").
   //
   // It is not the same as an empty amount box: there, nothing is priced because
-  // nothing was asked for, no wrong figure is on screen, and no disclosure is
-  // owed.
+  // nothing was asked for, and no wrong figure is on screen.
   cannotPrice: boolean;
+  // Whether the panel still owes the generic vesting disclosure — stage 1's
+  // notice, the disclosure of last resort.
+  //
+  // True in exactly one place: nothing could be priced AND the card has nothing
+  // of its own to say, which is a read that has not landed yet. The paused and
+  // unreadable cards each carry their own disclosure, so showing the generic
+  // one beside them would say the weaker half of it twice; and where a figure
+  // was priced the card says it with this amount's own numbers in it.
+  //
+  // A decision, not a rendering rule, which is why it is on the model: what a
+  // depositor is owed when the widget is mid-read is the same question the rest
+  // of this module answers, and a component deciding it is a decision nothing
+  // can assert.
+  discloseVesting: boolean;
 }
 
 // A vest date — "21 Sept". en-GB because that is the form the spec's copy is
@@ -215,6 +261,35 @@ function formatDaysAway(from: number, to: number): string {
 // how long until something about their shares changes.
 const termInDays = (seconds: number): string =>
   `${Math.round(seconds / DAY)}-day`;
+
+// Why nothing could be read, as the first sentence of the card.
+//
+// Two forms, because the two blame different things and a depositor can act on
+// only one of them. A failed read is the endpoint having a bad minute and the
+// reason is the chain's own words — quoted rather than paraphrased, since the
+// widget has no idea which of a dozen failures it was. A too-young ledger floor
+// is this widget shipped wrong: it names the registry's own block, how old it
+// is and the term it is too young for, and says plainly that no amount of
+// retrying by the depositor is the fix.
+function unreadableHeadline(
+  reason: HistoryUnreadable,
+  vestingSeconds: number
+): string {
+  if (reason.kind === "floor-too-young")
+    return (
+      `Couldn't price from your history — the vault registry's ledger floor ` +
+      `(block ${formatCount(reason.floorBlock)}, ` +
+      // FLOORED, never rounded: a floor 15.9 days old is fifteen days past, and
+      // a sentence that called it sixteen would overstate the one figure a
+      // maintainer checks the registry against.
+      `${Math.floor(reason.ageSeconds / DAY)} days old) is too young for a ` +
+      `${termInDays(vestingSeconds)} term. The widget's configuration needs ` +
+      `updating.`
+    );
+  return `Couldn't read your history from the chain — ${quotedReason(
+    reason.detail
+  )}.`;
+}
 
 // How much of the lock is left — "18 hours", and "34 minutes" in its last
 // hour, because "another 0 hours" is a lock that reads as over while the
@@ -241,6 +316,7 @@ function untilUnlock(seconds: number): string {
 export function buildWithdrawQuote(inputs: QuoteInputs): WithdrawQuote {
   const {
     history,
+    unreadable,
     shareBalance,
     navPerShare,
     now,
@@ -268,6 +344,7 @@ export function buildWithdrawQuote(inputs: QuoteInputs): WithdrawQuote {
     post: null,
     refused: false,
     cannotPrice: false,
+    discloseVesting: false,
   };
 
   // No quote while locked, and the lock is answered before anything else is
@@ -287,16 +364,54 @@ export function buildWithdrawQuote(inputs: QuoteInputs): WithdrawQuote {
       },
     };
 
-  // Nothing to price FROM: the rate is under review, or a read this prices
-  // against has not landed. The panel owes a disclosure, not a figure.
+  // Nothing to price FROM. Three different answers, in the order a depositor
+  // can act on them.
+  //
+  // The PAUSE first: it is the live operator state, it is the only one of the
+  // three that also closes the post (stage 1's gate, the contract's rather than
+  // this widget's), and telling a holder their history failed while the button
+  // is disabled for another reason sends them to fix the wrong thing.
+  if (paused === true)
+    return {
+      ...nothingPriced,
+      cannotPrice: true,
+      card: {
+        kind: "paused",
+        headline: "Redemptions are paused.",
+        body:
+          `The share price is under review by the operator, so nothing is ` +
+          `priced and no request can be posted until it resumes.`,
+      },
+    };
+
+  // Then a read that FAILED, which is a thing to say and a thing to retry.
+  // Posting stays open here: an unread history is the widget not knowing, and
+  // the widget does not refuse what it cannot establish.
+  if (unreadable !== null)
+    return {
+      ...nothingPriced,
+      cannotPrice: true,
+      card: {
+        kind: "unreadable",
+        headline: unreadableHeadline(unreadable, vestingSeconds),
+        body:
+          `Nothing is priced. A request posts at your redemption spread and, ` +
+          `on this product, may be passed over if your shares haven't ` +
+          `finished vesting.`,
+        retryLabel: "Try again",
+      },
+    };
+
+  // And last a read that has simply not landed. No wording of its own — nothing
+  // has failed — so the panel's generic vesting notice stands in.
   if (
-    paused ||
+    paused === null ||
     history === null ||
     shareBalance === null ||
     navPerShare === null ||
     navPerShare <= 0n
   )
-    return { ...nothingPriced, cannotPrice: true };
+    return { ...nothingPriced, cannotPrice: true, discloseVesting: true };
 
   // Exactly the shares that would post — the typed string converted the way the
   // library converts it. Recomputed on every keystroke because this is a pure
@@ -397,6 +512,7 @@ export function buildWithdrawQuote(inputs: QuoteInputs): WithdrawQuote {
     post: { offerShares: sold, discountPpm: posted.ppm },
     refused: false,
     cannotPrice: false,
+    discloseVesting: false,
   };
 }
 
@@ -474,6 +590,7 @@ function clamped(
     // will skip, and this is the one state where it can establish exactly that.
     refused: true,
     cannotPrice: false,
+    discloseVesting: false,
   };
 }
 

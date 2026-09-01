@@ -178,9 +178,11 @@ describe("what the pin stands behind", () => {
   });
 });
 
-// Fail SAFE. The verbatim wordings for these three are the "when the widget
-// cannot price" ticket's; what is fixed here is the BEHAVIOUR — a named cause,
-// no Confirm, no figure that was not pinned, and nothing posted.
+// Fail SAFE. The wordings for the three the spec names — paused, a failed tail
+// and a short balance — are its own, verbatim (§"When the widget cannot
+// price"), and asserted here as the whole sentence a depositor reads. What is
+// fixed alongside them is the BEHAVIOUR: a named cause, no Confirm, no figure
+// that was not pinned, and nothing posted.
 describe("when the figures cannot be pinned", () => {
   const cannot = (input: PinInputs) => {
     const pin = buildConfirmPin(input);
@@ -188,11 +190,18 @@ describe("when the figures cannot be pinned", () => {
     return pin;
   };
 
+  // The tile as it reads on screen: the bold cause, then the one sentence a
+  // depositor standing at a Confirm button needs to be certain of.
+  const tile = (pin: { headline: string; body: string }): string =>
+    `${pin.headline} ${pin.body}`;
+
   it("names the pause when the guarded rate read reverts", () => {
     const pin = cannot(mixed({ reads: { kind: "paused" } }));
     expect(pin.cause).toBe("paused");
-    expect(pin.headline).toBe("The share price is under review.");
-    expect(pin.body).toContain("Nothing has been posted.");
+    expect(tile(pin)).toBe(
+      "Couldn't pin the figures — the share price is under review (the " +
+        "accountant is paused). Nothing was posted."
+    );
   });
 
   it("names the failed read when the tail or the batch does not land", () => {
@@ -200,16 +209,42 @@ describe("when the figures cannot be pinned", () => {
       mixed({ reads: { kind: "unread", detail: "chunk 41 timed out" } })
     );
     expect(pin.cause).toBe("unread");
-    expect(pin.body).toContain("chunk 41 timed out");
-    expect(pin.body).toContain("Nothing has been posted.");
+    expect(tile(pin)).toBe(
+      "Couldn't re-read your history — chunk 41 timed out. Nothing was posted."
+    );
+    // The spec gives this one refusal a control: a read that failed may land on
+    // a second ask.
+    expect(pin.retryLabel).toBe("Try again");
+  });
+
+  it("offers no re-pin on the three refusals that are answers", () => {
+    // Asking the chain again returns the same answer for all three, so a Try
+    // again here would be a button that changes nothing.
+    expect(cannot(mixed({ reads: { kind: "paused" } })).retryLabel).toBeNull();
+    expect(cannot(mixed({ offerShares: 10_001n * SHARE })).retryLabel).toBeNull();
+    expect(
+      cannot(
+        inputs([deposit(ago(5), 10_000, 1_000_000n)], 1_015_000n, 10_000n * SHARE)
+      ).retryLabel
+    ).toBeNull();
+  });
+
+  it("does not double a reason that ends in its own full stop", () => {
+    const pin = cannot(
+      mixed({ reads: { kind: "unread", detail: "HTTP request failed." } })
+    );
+    expect(tile(pin)).toBe(
+      "Couldn't re-read your history — HTTP request failed. Nothing was posted."
+    );
   });
 
   it("names the short balance, in the figures it pinned", () => {
     const pin = cannot(mixed({ offerShares: 10_001n * SHARE }));
     expect(pin.cause).toBe("balance-short");
-    expect(pin.body).toContain("10,000 CCUSD30");
-    expect(pin.body).toContain("10,001 CCUSD30");
-    expect(pin.body).toContain("Nothing has been posted.");
+    expect(tile(pin)).toBe(
+      "Your balance is now 10,000 CCUSD30, less than the 10,001 you entered. " +
+        "Nothing was posted."
+    );
   });
 
   it("refuses an amount the contract's maximum spread cannot carry", () => {
@@ -236,8 +271,10 @@ describe("when the figures cannot be pinned", () => {
 });
 
 // What a re-check that refused to post says while the new figures are pinned
-// again. Only the rate wording is the spec's; the other two land with the
-// "when the widget cannot price" ticket.
+// again. Only the rate wording is the spec's — it writes none for the other
+// two, and none is owed: these are notices ABOVE figures that were pinned
+// successfully, not the pin-failure tiles above, and every one of them ends by
+// saying nothing was posted.
 describe("the re-pin notice", () => {
   it("says the share price changed, when a rate tick is what refused the post", () => {
     // The two pure seams composed the way the confirm step composes them: the

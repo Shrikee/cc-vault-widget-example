@@ -24,6 +24,7 @@ import {
   forgetScans,
   isCurrent,
   requestTail,
+  rescan as rescanRuns,
   scanKey,
   settleScan,
   startScan,
@@ -94,6 +95,12 @@ export interface DepositHistory extends DepositHistoryState {
   // Fold in everything since the last scanned block. Called after the user's
   // own deposit succeeds, never on a timer.
   refetchTail: () => void;
+  // Read the wallet's whole history from the ledger floor again — the manual
+  // Try again the degraded surfaces offer (spec §"When the widget cannot
+  // price"). Reached only from a control a depositor pressed: there is still no
+  // automatic retry anywhere in this hook, which is the ADR-0001 stance and the
+  // reason a failed scan otherwise sits there saying so.
+  rescan: () => void;
 }
 
 function summarise(
@@ -330,5 +337,27 @@ export function useDepositHistory(
     runScan(step.run);
   }, [client, address, forgetHeld, runScan]);
 
-  return { ...state, refetchTail };
+  // Try again. A FULL scan always, never a tail: the two states that offer this
+  // control are a scan that failed (which left no cursor) and a scan that
+  // succeeded under a ledger floor the widget could not establish (whose logs
+  // were read from that very floor). Neither is something a tail could mend.
+  //
+  // The held logs are dropped first, through the same helper every other reset
+  // goes through, so the confirm step's published cursor never outlives the
+  // logs it would fold into (src/lib/heldScan.ts).
+  const rescan = useCallback(() => {
+    const key = walletKey.current;
+    // Nothing to re-scan: no wallet, or a wallet whose position never made the
+    // scan's precondition hold. The surfaces still offer the control — the
+    // reason they are degraded may be the floor rather than this scan — and it
+    // is a no-op here rather than a state this hook has to represent.
+    if (!client || !address || key === null) return;
+    const step = rescanRuns(runs.current, key);
+    runs.current = step.runs;
+    forgetHeld(key);
+    setState({ status: "loading" });
+    if (step.run) runScan(step.run);
+  }, [client, address, forgetHeld, runScan]);
+
+  return { ...state, refetchTail, rescan };
 }

@@ -1,5 +1,10 @@
 import { useReadContracts } from "wagmi";
 
+import {
+  ACCOUNTANT_ABI,
+  isAccountantPaused,
+  lastRateUpdate,
+} from "../lib/lens";
 import type { Vault } from "../lib/vaultRegistry";
 
 // The system has three independent pause flags (integration guide §10):
@@ -16,31 +21,6 @@ const IS_PAUSED_ABI = [
     stateMutability: "view",
     inputs: [],
     outputs: [{ type: "bool" }],
-  },
-] as const;
-
-// Auto-generated getter for the public AccountantState struct returns the
-// fields flattened, in declaration order; isPaused is the 9th (index 8).
-const ACCOUNTANT_STATE_ABI = [
-  {
-    type: "function",
-    name: "accountantState",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [
-      { name: "payoutAddress", type: "address" },
-      { name: "highwaterMark", type: "uint96" },
-      { name: "feesOwedInBase", type: "uint128" },
-      { name: "totalSharesLastUpdate", type: "uint128" },
-      { name: "exchangeRate", type: "uint96" },
-      { name: "allowedExchangeRateChangeUpper", type: "uint16" },
-      { name: "allowedExchangeRateChangeLower", type: "uint16" },
-      { name: "lastUpdateTimestamp", type: "uint64" },
-      { name: "isPaused", type: "bool" },
-      { name: "minimumUpdateDelayInSeconds", type: "uint24" },
-      { name: "managementFee", type: "uint16" },
-      { name: "performanceFee", type: "uint16" },
-    ],
   },
 ] as const;
 
@@ -81,7 +61,7 @@ export function usePauseStatus(vault: Vault): PauseStatus {
       },
       {
         address: vault.addresses.accountant,
-        abi: ACCOUNTANT_STATE_ABI,
+        abi: ACCOUNTANT_ABI,
         functionName: "accountantState",
       },
       {
@@ -94,18 +74,26 @@ export function usePauseStatus(vault: Vault): PauseStatus {
   });
 
   // On read failure, err on the side of "not paused" — the flow still surfaces
-  // the real revert, and we avoid falsely locking the UI on an RPC hiccup.
+  // the real revert, and we avoid falsely locking the UI on an RPC hiccup. That
+  // is the right stance for GATING A TRANSACTION and the wrong one for quoting
+  // a number, which is why `pricingPaused` below is derived separately.
   const tellerPaused = data?.[0]?.result === true;
-  const accountantPaused = data?.[1]?.result?.[8] === true;
   const queuePaused = data?.[2]?.result === true;
 
-  // Field index 7 of the struct is lastUpdateTimestamp — the moment the
-  // accountant last posted a share price. The uint64 arrives as a bigint; 0
-  // means none has ever been posted, which is no more knowable than an
-  // unresolved poll, so both collapse to null and the caller omits the badge.
-  const lastUpdate = data?.[1]?.result?.[7];
+  // The struct's fields, through the accessors in src/lib/lens.ts rather than
+  // by index here. They are positional, so an index is a number that looks
+  // right in a diff whichever field it points at — and this hook and the
+  // confirm pin read the SAME two, which is exactly the pair that must never
+  // drift apart.
+  const state = data?.[1]?.result;
+  const accountantPaused = state !== undefined && isAccountantPaused(state);
+
+  // When the accountant last posted a share price. 0 means none ever has been,
+  // which is no more knowable than an unresolved poll, so both collapse to null
+  // and the caller omits the badge.
+  const lastUpdate = state === undefined ? null : lastRateUpdate(state);
   const lastSharePriceUpdateAt =
-    lastUpdate === undefined || lastUpdate === 0n ? null : Number(lastUpdate);
+    lastUpdate === null || lastUpdate === 0 ? null : lastUpdate;
 
   return {
     tellerPaused,
@@ -114,7 +102,13 @@ export function usePauseStatus(vault: Vault): PauseStatus {
     depositsPaused: tellerPaused || accountantPaused,
     withdrawalsPaused: queuePaused || accountantPaused,
     anyPaused: tellerPaused || accountantPaused || queuePaused,
-    pricingPaused: data === undefined ? null : accountantPaused,
+    // NOT `accountantPaused` above, and the difference is the whole point.
+    // `useReadContracts` allows failures per call, so a batch where only the
+    // accountant read failed comes back DEFINED with an undefined result — and
+    // collapsing that to `false` would hand every priced surface permission to
+    // quote against a flag that never landed. One unread state, however the
+    // read failed to arrive: unresolved batch, failed call, or reverted call.
+    pricingPaused: state === undefined ? null : isAccountantPaused(state),
     lastSharePriceUpdateAt,
   };
 }

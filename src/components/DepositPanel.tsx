@@ -175,7 +175,7 @@ export function DepositPanel({
 
       {/* On a product whose vesting term outlives its share lock, said before
           the deposit rather than after an unfilled redemption. */}
-      <VestingNotice vault={vault} where="deposit" />
+      <VestingNotice vault={vault} />
 
       <InlineError>{validationError}</InlineError>
 

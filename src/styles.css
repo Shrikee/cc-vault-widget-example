@@ -942,3 +942,125 @@ a:hover {
 .redemption .request {
   margin-bottom: 0;
 }
+
+/* ---------- the quote card (withdraw panel, vesting-gap products) ---------- */
+/* The fourth notice tone: the 1% clamp is a refusal, and it reads as one. The
+   three above it disclose; this one says the button will not post. */
+.notice--danger {
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  color: #ffd5d5;
+}
+
+/* Everything below is layout for a model that is already worded — see
+   src/lib/withdrawQuote.ts. Spacing comes from .notice's own 3px gap, widened
+   here because the card carries blocks rather than two lines of prose. */
+.quote {
+  gap: 10px;
+}
+
+/* The vested/unvested split as a shape. Two widths, both from the model. */
+.quote__bar {
+  display: flex;
+  height: 7px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+.quote__bar-part--vested {
+  background: var(--accent);
+}
+.quote__bar-part--unvested {
+  background: var(--warning);
+}
+
+.quote__legend,
+.quote__lots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+/* The "·" the spec's legend is written with. Dimmed, because it separates two
+   figures rather than saying anything itself. */
+.quote__legend-sep {
+  color: var(--text-muted);
+}
+.quote__legend span,
+.quote__lots li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* The "●" the copy is written around. An element rather than the character, so
+   it can carry the colour the bar uses for the same shares. */
+.quote__dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.quote__dot--vested {
+  background: var(--accent);
+}
+.quote__dot--unvested {
+  background: var(--warning);
+}
+
+/* Now, beside the full share price — the comparison the card exists to make,
+   so the two sit side by side rather than one under the other. */
+.quote__tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.quote__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+}
+.quote__tile-label {
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.quote__tile-value {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+/* The full share price is the figure NOT on offer, and is dimmed so the two are
+   not read as alternatives the depositor gets to choose between. */
+.quote__tile-value--dim {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.quote__tile-note {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* The cap sentence, and the clamp's remedies. */
+.quote__say,
+.quote__remedy {
+  font-size: 0.82rem;
+}
+
+.quote__lots {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex-direction: column;
+}
+
+@media (max-width: 520px) {
+  .quote__tiles {
+    grid-template-columns: 1fr;
+  }
+}

@@ -156,3 +156,19 @@ export function amountStringOf(units: bigint, decimals: number): string {
 export function formatDiscountPercent(discountPpm: bigint): string {
   return String(Number(discountPpm) / 1e4);
 }
+
+// The other direction: the spread control's percent as the queue's ppm.
+//
+// It lives here, beside its inverse, because it is the same number in the same
+// two units and a surface that converted it on its own could quote one spread
+// and post another. Rounded rather than truncated: 0.07 × 10,000 is
+// 699.9999999999999 in a double, and truncating there posts a spread a unit
+// narrower than the one shown — which is the rounding direction this whole
+// module exists to get right.
+//
+// Anything the control can hold but not mean — blank, junk, a negative — is no
+// spread at all; the panel's own validation is what says so to the holder.
+export function spreadPpmOf(percent: number): bigint {
+  if (!Number.isFinite(percent) || percent <= 0) return 0n;
+  return BigInt(Math.round(percent * 1e4));
+}

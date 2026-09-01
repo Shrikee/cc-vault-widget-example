@@ -8,6 +8,11 @@ import type { Vault } from "../lib/vaultRegistry";
 export interface VaultMetrics {
   tvl: number | null;
   shareValue: number | null;
+  // The share price undivided, want units per whole share — what a vesting-gap
+  // product's exit is priced from (src/lib/withdrawQuote.ts). Spelled the
+  // glossary's way: only `shareValue` above is grandfathered. null until the
+  // read lands, or after one that failed.
+  sharePriceRaw: bigint | null;
   loading: boolean;
   error: string | null;
   refetch: () => void;
@@ -44,6 +49,7 @@ export function useVaultMetrics(vault: Vault, pollMs = 45_000): VaultMetrics {
     // The glossary's term is "share price"; this field keeps the older name its
     // consumers already spell, and renaming it is a job of its own.
     shareValue: figures?.sharePrice ?? null,
+    sharePriceRaw: figures?.sharePriceRaw ?? null,
     loading: query.isFetching,
     error: query.error ? errorMessage(query.error) : null,
     refetch: query.refetch,

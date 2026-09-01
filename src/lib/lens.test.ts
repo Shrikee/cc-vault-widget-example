@@ -123,6 +123,21 @@ describe("the figures those calls come back with", () => {
     expect(sharePrice).toBe(1.004321);
   });
 
+  it("keeps the raw share price beside the float, undivided", () => {
+    // The float is what the stats show; the bigint beside it is what the
+    // entitlement rule reads. Every ceiling, required spread and ask price is
+    // computed in want units per whole share, and a rate that went through a
+    // double on the way in cannot be compared to a ceiling that did not — the
+    // difference between the two is a want unit, and a want unit is a skip.
+    const raw = 1_000_122n;
+    const { sharePrice, sharePriceRaw } = decodeVaultMetrics(
+      [["0x00", 0n], raw],
+      BASE_DECIMALS
+    );
+    expect(sharePriceRaw).toBe(raw);
+    expect(sharePrice).toBe(1.000122);
+  });
+
   it("reads shares at the vault's own decimals, not the base asset's", () => {
     expect(YIELD_PRIME.ui.decimals).toBe(18);
     const { shares } = decodeUserPosition(

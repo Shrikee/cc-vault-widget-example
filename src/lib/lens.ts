@@ -144,6 +144,12 @@ export interface VaultMetricsFigures {
   tvl: number;
   // The value of one share in the base asset.
   sharePrice: number;
+  // The same rate undivided, in want units per whole share. The float above is
+  // what the stats show; this is what an exit is PRICED from — the entitlement
+  // ceiling, the required spread and the ask are all computed against it in
+  // bigints, and a rate that had been through a double could not be compared to
+  // a ceiling that had not.
+  sharePriceRaw: bigint;
 }
 
 export interface UserPositionFigures {
@@ -169,6 +175,7 @@ export function decodeVaultMetrics(
     // totalAssets returns (asset, assets); the widget shows the second.
     tvl: Number(totalAssets[1]) / 10 ** baseDecimals,
     sharePrice: Number(exchangeRate) / 10 ** baseDecimals,
+    sharePriceRaw: exchangeRate,
   };
 }
 

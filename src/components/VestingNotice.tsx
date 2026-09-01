@@ -25,34 +25,23 @@ import { hasVestingGap, vestingDays, type Vault } from "../lib/vaultRegistry";
 //
 // WHAT THIS NOTICE DOES NOT SAY, and why. Where to ask when a request stays
 // open moved to the request itself (src/lib/requestStatus.ts, rendered by
-// RequestRow). This notice is on the two panels because that is where the two
-// decisions it informs are taken — whether to enter, and what spread to leave
-// with — and both are taken before there is a request to ask about. Once there
-// is one, it is listed in the side rail's redemptions card, which is outside the
-// selection and outside the tabs: a 30d request that is not filling is normally
-// read from the deposit tab or from the other product, where neither of these
-// panels is on screen. So the forward-looking half is here, beside the spread
-// control that is the remedy, and the after-the-fact half is beside the request.
-// Neither half is on three surfaces. The "how it works" explainer states the
-// cap a third time, which is not the same duplication: retelling the whole
-// deposit → lock → vest → redeem timeline is what that card is for, and it
-// restates the share lock and the redemption step alongside it.
+// RequestRow). It is on the DEPOSIT panel only, and that is the whole of it: the
+// decision it informs there — whether to enter a product whose shares vest long
+// after they unlock — is taken before there is any amount to price. On the
+// withdraw panel the same disclosure is now made with numbers, for the amount in
+// the box, by the quote card (src/lib/withdrawQuote.ts, spec §"The surfaces —
+// Variant B"), so this generic version left that panel rather than saying the
+// weaker half of it twice. The "how it works" explainer states the cap again,
+// which is not the same duplication: retelling the whole deposit → lock → vest →
+// redeem timeline is what that card is for, and it restates the share lock and
+// the redemption step alongside it.
 //
 // Nothing here prices anything. `vestingSeconds` is read for one purpose — to
 // say "30 days" in the depositor's own terms rather than hard-coding it beside
 // a registry that already knows — and for which products the notice applies to
 // at all. The arithmetic that uses it is stage 2's.
 
-export function VestingNotice({
-  vault,
-  where,
-}: {
-  vault: Vault;
-  // Which panel is asking. The facts are the same on both; what leads differs,
-  // because one reader is deciding whether to enter and the other is trying to
-  // leave.
-  where: "deposit" | "withdraw";
-}) {
+export function VestingNotice({ vault }: { vault: Vault }) {
   // Nothing to disclose on a product whose shares have vested by the time they
   // unlock — see hasVestingGap.
   if (!hasVestingGap(vault)) return null;
@@ -66,9 +55,7 @@ export function VestingNotice({
         {vault.ui.name} vests over {term} days.
       </strong>
       <span>
-        {where === "deposit"
-          ? `Your ${vault.ui.symbol} shares unlock after ${lock} day and can be redeemed then, but they do not finish vesting for ${term} days.`
-          : `Your ${vault.ui.symbol} shares unlock after ${lock} day, but they do not finish vesting for ${term} days.`}{" "}
+        {`Your ${vault.ui.symbol} shares unlock after ${lock} day and can be redeemed then, but they do not finish vesting for ${term} days.`}{" "}
         Redeem before they vest and you are entitled to no more than what you
         paid — a cap, not a floor: if the share price has fallen below what you
         paid, you get the share price, not your money back. So a request may

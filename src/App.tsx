@@ -173,6 +173,8 @@ export function App() {
                     shares={position.shares}
                     sharesRaw={position.sharesRaw}
                     shareValue={metrics.shareValue}
+                    sharePriceRaw={metrics.sharePriceRaw}
+                    history={depositHistory.history ?? null}
                     unlockAt={position.unlockAt}
                     rightChain={rightChain}
                     paused={pause.withdrawalsPaused}

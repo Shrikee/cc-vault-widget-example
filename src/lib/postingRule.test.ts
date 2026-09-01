@@ -18,6 +18,7 @@ import {
   offerSharesOf,
   payout,
   postedDiscount,
+  spreadPpmOf,
   requiredSpread,
 } from "./postingRule";
 
@@ -245,6 +246,35 @@ describe("amountStringOf — what MAX puts in the box", () => {
     expect(amountStringOf(10n ** 18n, decimals)).toBe("1");
     expect(amountStringOf(1_500_000_000_000_000_000n, decimals)).toBe("1.5");
     expect(amountStringOf(0n, decimals)).toBe("0");
+  });
+});
+
+describe("spreadPpmOf", () => {
+  it("reads the spread control's percent as the queue's ppm", () => {
+    // The panel's default and its maximum, and the two figures between them the
+    // worked examples use.
+    expect(spreadPpmOf(0.1)).toBe(1_000n);
+    expect(spreadPpmOf(1)).toBe(10_000n);
+    expect(spreadPpmOf(0)).toBe(0n);
+    expect(spreadPpmOf(0.5)).toBe(5_000n);
+    expect(spreadPpmOf(0.0274)).toBe(274n);
+  });
+
+  it("is the inverse of what goes on the wire, for every postable spread", () => {
+    // The control types a percent and the queue takes ppm; these are the two
+    // directions of the same number, and a panel that converted it itself could
+    // quote one spread and post another.
+    for (let d = 0; d <= 10_000; d++) {
+      expect(spreadPpmOf(Number(formatDiscountPercent(BigInt(d))))).toBe(BigInt(d));
+    }
+  });
+
+  it("does not let a typed decimal fall a ppm short", () => {
+    // 0.07% is 700 ppm exactly, but 0.07 × 10_000 is 699.9999999999999 in a
+    // double. Truncating there would post a spread one unit narrower than the
+    // one shown — and a unit is a skip.
+    expect(spreadPpmOf(0.07)).toBe(700n);
+    expect(spreadPpmOf(0.29)).toBe(2_900n);
   });
 });
 

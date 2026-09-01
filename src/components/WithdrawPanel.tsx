@@ -13,11 +13,14 @@ import {
   WITHDRAW_VALID_DAYS_DEFAULT,
 } from "../config/redemption";
 import { WITHDRAW_TOKEN } from "../config/tokens";
-import type { Vault } from "../lib/vaultRegistry";
+import type { HolderEvent } from "../entitlement/entitlement";
+import { hasVestingGap, type Vault } from "../lib/vaultRegistry";
 import { formatAmount, parseAmount, shortAddress } from "../lib/format";
-import { amountStringOf } from "../lib/postingRule";
+import { amountStringOf, spreadPpmOf } from "../lib/postingRule";
+import { buildWithdrawQuote } from "../lib/withdrawQuote";
 import { AmountInput } from "./AmountInput";
 import { Modal } from "./Modal";
+import { QuoteCard } from "./QuoteCard";
 import { VestingNotice } from "./VestingNotice";
 import { Button, InlineError } from "./ui";
 
@@ -31,6 +34,8 @@ export function WithdrawPanel({
   shares,
   sharesRaw,
   shareValue,
+  sharePriceRaw,
+  history,
   unlockAt,
   rightChain,
   paused,
@@ -47,6 +52,15 @@ export function WithdrawPanel({
   // The same balance undivided. MAX types this, not the float beside it.
   sharesRaw: bigint | null;
   shareValue: number | null;
+  // The same share price undivided — the glossary's own term, which the float
+  // above predates. Stage 1's estimate is a double and stays one; a quote
+  // priced against the entitlement ceiling is bigints throughout, because the
+  // two are compared to the want unit.
+  sharePriceRaw: bigint | null;
+  // This wallet's holder history in this product — what the entitlement
+  // ceiling is computed from. Only a vesting-gap product has one, and only
+  // once its scan has landed.
+  history: readonly HolderEvent[] | null;
   unlockAt: number | null;
   rightChain: boolean;
   paused: boolean;
@@ -104,11 +118,47 @@ export function WithdrawPanel({
       validDaysNum <= 0 ||
       validDaysNum > MAX_VALID_DAYS);
 
-  // Minimum you accept: NAV per share less the spread, times shares.
+  // Minimum you accept: NAV per share less the spread, times shares. Stage 1's
+  // estimate, and still what a product with no vesting gap shows — there every
+  // share prices at the share price, so this IS the number.
   const estMinOut =
     parsed !== null && shareValue
       ? parsed * shareValue * (1 - discountNum / 100)
       : null;
+
+  // Where the shares vest AFTER they unlock, that estimate is wrong for anyone
+  // still vesting: it prices unvested shares at the full share price, which is
+  // the one price the solver will not pay. So on those products the panel
+  // stops estimating and renders the quote model instead — the whole card, both
+  // rows and the refusal, recomputed on every keystroke because it is a pure
+  // function of what is in the box (src/lib/withdrawQuote.ts).
+  //
+  // The gate is the VESTING GAP, never the vault id: a product whose shares
+  // have vested by the time they unlock has nothing to price against, and its
+  // panel is stage 1's, untouched.
+  const quote = hasVestingGap(vault)
+    ? buildWithdrawQuote({
+        history,
+        shareBalance: sharesRaw,
+        navPerShare: sharePriceRaw,
+        now,
+        unlockAt,
+        paused,
+        vestingSeconds: vault.vestingSeconds,
+        shareLockSeconds: vault.ui.shareLockPeriod,
+        shareDecimals: vault.ui.decimals,
+        amount,
+        // The spread control in the queue's own units. A value the control
+        // itself rejects is not quoted from — the panel's own error says so —
+        // so the quote falls back to the default rather than pricing off junk.
+        holderSpreadPpm: spreadPpmOf(
+          discountInvalid ? WITHDRAW_DISCOUNT_PCT_DEFAULT : discountNum
+        ),
+        holderSpreadIsDefault: !discount.trim() || discountInvalid,
+        shareSymbol,
+        wantSymbol,
+      })
+    : null;
 
   let validationError: string | null = null;
   if (parsed === null && amount.trim()) validationError = "Enter a valid share amount.";
@@ -128,6 +178,10 @@ export function WithdrawPanel({
     !overShares &&
     !discountInvalid &&
     !validDaysInvalid &&
+    // The 1% clamp, and no override: the widget does not post a request it can
+    // establish the solver will skip. The card names the cause and offers the
+    // largest amount that does price.
+    !quote?.refused &&
     !busy;
 
   async function runRequest() {
@@ -168,22 +222,46 @@ export function WithdrawPanel({
         disabled={busy || !address || locked}
       />
 
+      {/* Between the amount and the rows: the answer to the question the
+          depositor came with, not another row. The stage-1 vesting notice is
+          gone from this panel — the card says it, with this amount's own
+          numbers in it (the deposit panel's notice is untouched). */}
+      {quote && <QuoteCard card={quote.card} onUseOffer={setAmount} />}
+
+      {/* The disclosure of last resort. The card normally carries it — with
+          this amount's own numbers in it — but where nothing could be priced
+          (the rate under review, a history or rate not yet read) posting still
+          stays OPEN at the holder's own spread, and ADR-0003 allows that only
+          disclosed. So stage 1's generic notice stands in for exactly those
+          states, until the "when the widget cannot price" ticket lands wordings
+          of their own. On a product with no vesting gap it renders nothing, as
+          it always did, and the deposit panel's copy is untouched. */}
+      {quote?.cannotPrice && <VestingNotice vault={vault} />}
+
       <div className="rows">
         <div className="row">
           <span>You receive (est., min)</span>
           <span>
-            {estMinOut === null ? "—" : `${formatAmount(estMinOut, 2)} ${wantSymbol}`}
+            {quote
+              ? quote.receive
+              : estMinOut === null
+              ? "—"
+              : `${formatAmount(estMinOut, 2)} ${wantSymbol}`}
           </span>
         </div>
         <div className="row">
           <span>Redemption spread</span>
-          <span>{effectiveSpread}</span>
+          <span>
+            {!quote ? (
+              effectiveSpread
+            ) : quote.spreadIsRequired ? (
+              <strong>{quote.spread}</strong>
+            ) : (
+              quote.spread
+            )}
+          </span>
         </div>
       </div>
-
-      {/* Above the spread control, because the spread is the remedy it names:
-          on a product that vests, an exit before it does may need a wider one. */}
-      <VestingNotice vault={vault} where="withdraw" />
 
       <button
         type="button"
@@ -228,7 +306,10 @@ export function WithdrawPanel({
         </div>
       )}
 
-      {locked && (
+      {/* Stage 1's lock notice, kept for the products whose card does not carry
+          one: where an exit is priced, the quote card IS the lock notice, and
+          two of them would say the same thing twice. */}
+      {locked && !quote && (
         <div className="notice notice--warning">
           Your shares are still locked. You can request a redemption once the
           1-day deposit lock ends.

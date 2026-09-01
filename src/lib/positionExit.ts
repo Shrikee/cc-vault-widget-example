@@ -28,6 +28,7 @@ import type {
 } from "../entitlement/entitlement";
 import { largestPostableShares, lotListing } from "./lotListing";
 import { askPrice, payout, postedDiscount, requiredSpread } from "./postingRule";
+import { formatWant, formatShares, formatSpread } from "./figures";
 
 // What the card knows about one product's holding. The vendored rule's seven
 // inputs minus the offered shares — which are the balance, always — plus the
@@ -185,42 +186,6 @@ function clamped(query: EntitlementInputs, shareSymbol: string): string {
     : `${refusal}.`;
 }
 
-// A non-negative bigint of `decimals` dp as a grouped decimal string, rounded
-// half-up to `maxDp` and trimmed to no fewer than `minDp` places. Every figure
-// in the line goes through this rather than through a double: a share balance
-// is an 18-dp bigint and a double holds about fifteen digits, so the figure a
-// depositor reads would not be the figure they hold.
-//
-// The routine src/lib/withdrawQuote.ts keeps privately at HEAD, byte for byte,
-// and a copy on purpose. The confirm-modal work in flight beside this lifts
-// both copies into src/lib/figures.ts, which is not committed yet — and a
-// module must not import a file that is not in the repository. This copy comes
-// out with that one, in the change that lands it; until then the only thing
-// that would be a bug is rounding a payout differently from the panel, and an
-// identical routine cannot.
-function decimalString(
-  units: bigint,
-  decimals: number,
-  minDp: number,
-  maxDp: number
-): string {
-  let scaled: bigint;
-  if (maxDp >= decimals) {
-    scaled = units * 10n ** BigInt(maxDp - decimals);
-  } else {
-    const div = 10n ** BigInt(decimals - maxDp);
-    const whole = units / div;
-    scaled = (units % div) * 2n >= div ? whole + 1n : whole;
-  }
-  const scale = 10n ** BigInt(maxDp);
-  let frac = maxDp > 0 ? (scaled % scale).toString().padStart(maxDp, "0") : "";
-  while (frac.length > minDp && frac.endsWith("0")) frac = frac.slice(0, -1);
-  const grouped = (scaled / scale)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return frac ? `${grouped}.${frac}` : grouped;
-}
-
 // A want amount as the screen writes it: half-up to the cent, still in want
 // units, so a difference taken between two of these is a difference a reader
 // can check against the figures in front of them.
@@ -230,20 +195,7 @@ function roundedToCents(units: bigint): bigint {
   return ((units % perCent) * 2n >= perCent ? whole + 1n : whole) * perCent;
 }
 
-// A want amount as money — "9,999.99". Always two places: it is a payout.
-const formatWant = (units: bigint): string => decimalString(units, 6, 2, 2);
 
-// A share amount — "4,000" / "6,741".
-const formatShares = (units: bigint, decimals: number): string =>
-  decimalString(units, decimals, 0, 6);
-
-// A spread in the queue's ppm as a percent — 1000 → "0.10%", 1991 → "0.1991%".
-// Two places for a round tenth and four otherwise, because the required spread
-// is rarely a round tenth and "0.20%" is not the number that would be posted.
-function formatSpread(ppm: bigint): string {
-  const dp = Number(ppm) % 100 === 0 ? 2 : 4;
-  return `${(Number(ppm) / 10_000).toFixed(dp)}%`;
-}
 
 // How much of the lock is left, compact — "18 h", and "34 m" in its last hour.
 // The share lock is a day at most, so there is no day form to write.

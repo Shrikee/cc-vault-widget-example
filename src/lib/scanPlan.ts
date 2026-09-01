@@ -19,18 +19,37 @@
 //     paid, so a product the wallet holds none of has no earnings to compute
 //     and its deposit history is never read. The share balance is already on
 //     screen, so this costs nothing to decide.
+//   • Widen where an exit is priced. A vesting-gap product prices a holder's
+//     early exit against its entitlement ceiling (ADR-0003), which needs the
+//     holder's whole history rather than its deposits — so on that product, and
+//     only there, a wallet's scan asks a wider question of a wider gate. That
+//     is the one decision here that is about WHICH EVENTS a scan reads and not
+//     only which blocks, which is why the ranges below carry their filters.
 //
-// Pure — no chain, no React, no bundler globals — so ./scanPlan.test.ts drives
-// this exact code, and what it drives is a cost: the vectors count the chunks
-// each plan asks for.
+// Pure — no chain, no React, no DOM — so ./scanPlan.test.ts drives this exact
+// code, and what it drives is a cost: the vectors count the chunks each plan
+// asks for. The one thing it reaches into ./logScan.ts for is the eth_getLogs
+// wire format: a filtered range is a topic filter, and how an address is spelt
+// in one belongs beside the code that decodes it back.
 //
 // It is several small functions rather than one call because the answers are
 // needed at different moments. The two hooks that scan (useShareHistory,
 // useDepositHistory) must decide whether to scan at all — and say so on screen
 // — before they have the chain head, and must decide which blocks after it.
 // Bundling those would mean handing each hook the other's inputs.
-import { BLOCKS_PER_DAY, HEADLINE_WINDOW, WINDOWS } from "../config/history";
-import type { Vault } from "./vaultRegistry";
+import type { Address } from "viem";
+
+import {
+  BLOCKS_PER_DAY,
+  HEADLINE_WINDOW,
+  TOPIC_DEPOSIT,
+  TOPIC_DEPOSIT_REFUNDED,
+  TOPIC_FULFILLED,
+  TOPIC_TRANSFER,
+  WINDOWS,
+} from "../config/history";
+import { addressTopic, type LogTopic } from "./logScan";
+import { hasVestingGap, type Vault } from "./vaultRegistry";
 
 // An inclusive block range, as eth_getLogs takes it. Both ends are block
 // numbers on the chain the roster declares.
@@ -180,4 +199,112 @@ export function depositScanRange({
   head,
 }: DepositScanRangeInput): BlockRange {
   return { from: resumeFrom ?? BigInt(vault.eventsFromBlock), to: head };
+}
+
+// Whether a wallet's history in a product needs reading, where a product prices
+// an early exit against the holder's entitlement (spec, "The holder-history
+// read"; ADR-0003).
+//
+// This is planDepositScan's gate widened, and only where the widening buys
+// something. On a VESTING-GAP product the precondition is `shares > 0`, nothing
+// else. Stage 1's `shareUnlockTime ≠ 0` is right for earnings — no deposit, no
+// average deposit cost — and wrong for the history: a wallet that received its
+// shares by transfer never deposited, holds one unvested lot, and unread would
+// quote as a vested RESIDUAL lot at full share price. That is the over-quote the
+// solver skips, so the widened gate is the difference between a request that
+// fills and one that sits open.
+//
+// Such a wallet still derives `avgCost: null` and still shows earnings as "—":
+// what widens is which wallets are scanned, never what a scan means.
+//
+// Where there is no vesting gap nothing is priced against a ceiling, so the
+// history has no reader and the gate stays exactly stage 1's — which is also
+// what keeps the 24h product's scan the size it was.
+export interface WalletScanInput extends DepositScanInput {
+  // Which product's history, because whether the widening applies is the
+  // product's own property (hasVestingGap) and not the wallet's.
+  vault: Vault;
+}
+
+export function planWalletScan({ vault, shares, unlockAt }: WalletScanInput): DepositScanPlan {
+  if (!hasVestingGap(vault)) return planDepositScan({ shares, unlockAt });
+  if (shares === null) return "unresolved";
+  if (shares > 0) return "scan";
+  // No shares: no history to price and no earnings to compute, and the two
+  // reasons still say different things under the position value (planDepositScan
+  // above). Which one it is takes the unlock time, so an unresolved one waits.
+  if (unlockAt === null) return "unresolved";
+  return unlockAt === 0 ? "never-deposited" : "no-shares";
+}
+
+// One eth_getLogs filter over one span of blocks.
+//
+// `kind` is what the range brings back, so the caller can hand each result to
+// the derivation that reads it without re-deriving that from the topics.
+export interface WalletScanRange extends BlockRange {
+  kind: "deposit" | "transfer" | "fill";
+  address: Address;
+  topics: LogTopic[];
+}
+
+export interface WalletScanRangeInput extends DepositScanRangeInput {
+  wallet: string;
+}
+
+// Every range one wallet's scan reads in a product — three on a vesting-gap
+// product, one everywhere else.
+//
+// All of them over the SAME blocks: the history read is a widening of stage 1's
+// deposit scan, not a second scan, so there is one span, one cursor and one
+// bookkeeping entry (./scanRuns.ts) however many ranges it takes. What it costs
+// is that multiplication — three ranges over the ledger floor to head is three
+// times what stage 1 asked for on that product — and ./scanPlan.test.ts counts
+// it in requests.
+//
+// Two of the three are filtered to the wallet. The share transfers are not, and
+// cannot be: eth_getLogs matches topics by position and cannot OR across two of
+// them, so a wallet's two legs would be two ranges. One unfiltered range is
+// cheaper than that, and the replay keeps the legs that are the wallet's
+// (./holderHistory.ts).
+export function walletScanRanges({
+  vault,
+  wallet,
+  resumeFrom,
+  head,
+}: WalletScanRangeInput): WalletScanRange[] {
+  const blocks = depositScanRange({ vault, resumeFrom, head });
+  const holder = addressTopic(wallet);
+  // Both Teller events in one range, as stage 1 reads them: the average deposit
+  // cost excludes refunded deposits and the history deliberately keeps them, and
+  // that divergence belongs to the derivations, not to the scan.
+  //
+  // src/hooks/useDepositHistory.ts still builds this same filter inline. The
+  // ticket that widens that scan onto these ranges is what collapses the two;
+  // until it does, the two spellings must stay in step.
+  const deposit: WalletScanRange = {
+    ...blocks,
+    kind: "deposit",
+    address: vault.addresses.teller,
+    topics: [[TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED], null, holder],
+  };
+  if (!hasVestingGap(vault)) return [deposit];
+
+  return [
+    deposit,
+    { ...blocks, kind: "transfer", address: vault.addresses.vault, topics: [TOPIC_TRANSFER] },
+    {
+      ...blocks,
+      kind: "fill",
+      address: vault.addresses.queue,
+      // The queue serves every vault and every want token: without the last two
+      // topics a fill of some other product's shares would land in this
+      // product's history.
+      topics: [
+        TOPIC_FULFILLED,
+        holder,
+        addressTopic(vault.addresses.vault),
+        addressTopic(vault.addresses.want),
+      ],
+    },
+  ];
 }

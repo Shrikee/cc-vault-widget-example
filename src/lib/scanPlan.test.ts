@@ -13,7 +13,13 @@
 import { describe, expect, it } from "vitest";
 
 import { ROSTER } from "../config/vaults";
-import { HEADLINE_WINDOW } from "../config/history";
+import {
+  HEADLINE_WINDOW,
+  TOPIC_DEPOSIT,
+  TOPIC_DEPOSIT_REFUNDED,
+  TOPIC_FULFILLED,
+  TOPIC_TRANSFER,
+} from "../config/history";
 import { chunkRanges } from "./logScan";
 import { vaultById } from "./vaultRegistry";
 import {
@@ -21,9 +27,12 @@ import {
   depositScanRange,
   planDepositScan,
   planSharePriceScan,
+  planWalletScan,
   scanWindowDays,
+  walletScanRanges,
   widenCovered,
   type BlockRange,
+  type WalletScanRange,
 } from "./scanPlan";
 
 const HEAD = 92_835_789n;
@@ -288,5 +297,124 @@ describe("where a deposit scan starts", () => {
     // caller reads as "nothing new" and commits without a request.
     const caught = depositScanRange({ vault: VAULT_24H, resumeFrom: HEAD + 1n, head: HEAD });
     expect(caught.from).toBeGreaterThan(caught.to);
+  });
+});
+
+// =============================================================================
+// The widened wallet scan — a vesting-gap product's holder history (spec, "The
+// holder-history read"; ADR-0003).
+// =============================================================================
+
+// The fork scenario's holder D (docs/wayfinder/entitlement/assets/
+// 03-the-same-number/out/fork.json): 400 shares, every one of them received by
+// transfer, so its shareUnlockTime is 0 — it never deposited.
+const RECIPIENT = { shares: 400, unlockAt: 0 };
+const WALLET = "0x5df638485db34ff4fb5a1c565b9b27c12851ed38";
+
+describe("the gate on a wallet's scan", () => {
+  it("scans a transfer recipient where the vesting gap prices exits", () => {
+    // Stage 1's gate is right for earnings and wrong for the history: unread,
+    // this wallet's unvested lot quotes as a VESTED residual at full share
+    // price — the over-quote the solver skips and the holder waits on.
+    expect(planWalletScan({ vault: VAULT_30D, ...RECIPIENT })).toBe("scan");
+    expect(planDepositScan(RECIPIENT)).toBe("never-deposited");
+  });
+
+  it("keeps stage 1's gate on a product with no vesting gap", () => {
+    // Nothing is priced against a ceiling there, so the extra scan would buy a
+    // history no surface reads.
+    expect(planWalletScan({ vault: VAULT_24H, ...RECIPIENT })).toBe("never-deposited");
+  });
+
+  it("is `shares > 0` and nothing else on a vesting-gap product", () => {
+    expect(planWalletScan({ vault: VAULT_30D, shares: 1.05, unlockAt: 0 })).toBe("scan");
+    expect(planWalletScan({ vault: VAULT_30D, shares: 1.05, unlockAt: 1_787_000_000 })).toBe("scan");
+    // A balance that has not landed is not a balance of none: scanning on it
+    // would read the previously connected wallet's history.
+    expect(planWalletScan({ vault: VAULT_30D, shares: null, unlockAt: 0 })).toBe("unresolved");
+  });
+
+  it("still says which kind of nothing a wallet holding none of it is", () => {
+    // Both skip the scan, and they say different things under the position
+    // value — one exited, the other was never here.
+    expect(planWalletScan({ vault: VAULT_30D, shares: 0, unlockAt: 0 })).toBe("never-deposited");
+    expect(planWalletScan({ vault: VAULT_30D, shares: 0, unlockAt: 1_787_000_000 })).toBe(
+      "no-shares"
+    );
+    expect(planWalletScan({ vault: VAULT_30D, shares: 0, unlockAt: null })).toBe("unresolved");
+  });
+
+  it("answers exactly as stage 1 does wherever there is no vesting gap", () => {
+    for (const shares of [null, 0, 1.05]) {
+      for (const unlockAt of [null, 0, 1_787_000_000]) {
+        expect(planWalletScan({ vault: VAULT_24H, shares, unlockAt })).toBe(
+          planDepositScan({ shares, unlockAt })
+        );
+      }
+    }
+  });
+});
+
+// What the widened scan costs, in the terms the rest of this file counts in:
+// requests. Three ranges over the same blocks are three times one range's
+// chunks, and that multiplication is the whole price of pricing an early exit.
+describe("what a wallet's scan reads, per chunk", () => {
+  const rangesOf = (vault = VAULT_30D, resumeFrom: bigint | null = null) =>
+    walletScanRanges({ vault, wallet: WALLET, resumeFrom, head: HEAD });
+  const requests = (ranges: WalletScanRange[]) =>
+    ranges.reduce((n, range) => n + chunkRanges(range.from, range.to).length, 0);
+
+  it("reads one range per chunk on the 24h product and three on the 30d", () => {
+    expect(rangesOf(VAULT_24H).map((range) => range.kind)).toEqual(["deposit"]);
+    expect(rangesOf(VAULT_30D).map((range) => range.kind)).toEqual([
+      "deposit",
+      "transfer",
+      "fill",
+    ]);
+  });
+
+  it("costs the deposit scan's chunks, three times over, and no more", () => {
+    const chunks = chunkRanges(BigInt(VAULT_30D.eventsFromBlock), HEAD).length;
+    expect(requests(rangesOf(VAULT_30D))).toBe(3 * chunks);
+    expect(requests(rangesOf(VAULT_24H))).toBe(
+      chunkRanges(BigInt(VAULT_24H.eventsFromBlock), HEAD).length
+    );
+  });
+
+  it("reads every kind over the deposit scan's own blocks — one scan, one cursor", () => {
+    const blocks = depositScanRange({ vault: VAULT_30D, resumeFrom: null, head: HEAD });
+    for (const range of rangesOf(VAULT_30D)) {
+      expect({ from: range.from, to: range.to }).toEqual(blocks);
+    }
+    const tail = depositScanRange({ vault: VAULT_30D, resumeFrom: 92_800_000n, head: HEAD });
+    for (const range of rangesOf(VAULT_30D, 92_800_000n)) {
+      expect({ from: range.from, to: range.to }).toEqual(tail);
+    }
+  });
+
+  it("filters what it can and leaves the share transfers unfiltered", () => {
+    const [deposit, transfer, fill] = rangesOf(VAULT_30D);
+    const topic = `0x${WALLET.slice(2).padStart(64, "0")}`;
+
+    // Both Teller events, this wallet as receiver — stage 1's own filter, kept
+    // whole so the average deposit cost still reads its refunds.
+    expect(deposit.address).toBe(VAULT_30D.addresses.teller);
+    expect(deposit.topics).toEqual([[TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED], null, topic]);
+
+    // eth_getLogs cannot OR across topic positions, so a wallet's two transfer
+    // legs are one unfiltered range rather than two filtered ones — cheaper by
+    // a whole scan, and the replay keeps the legs that are this wallet's.
+    expect(transfer.address).toBe(VAULT_30D.addresses.vault);
+    expect(transfer.topics).toEqual([TOPIC_TRANSFER]);
+
+    // The queue serves every vault and every want token, so all three indexed
+    // fields are pinned: this wallet, selling THIS product's shares, for want.
+    expect(fill.address).toBe(VAULT_30D.addresses.queue);
+    expect(fill.topics).toEqual([
+      TOPIC_FULFILLED,
+      topic,
+      `0x${VAULT_30D.addresses.vault.slice(2).toLowerCase().padStart(64, "0")}`,
+      `0x${VAULT_30D.addresses.want.slice(2).toLowerCase().padStart(64, "0")}`,
+    ]);
   });
 });

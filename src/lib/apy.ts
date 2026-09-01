@@ -1,5 +1,12 @@
 // Realised trailing APY, earnings and projected earnings — the pure derivations.
 //
+// Its log decoding serves one more reader than its arithmetic does: the Teller
+// scan's raw logs feed BOTH the average deposit cost below and the holder
+// history the entitlement ceiling is priced from (./holderHistory.ts). One
+// decoder, two derivations that read its output differently — a refunded
+// deposit is excluded here and deliberately kept there — because the divergence
+// belongs to the derivations and not to a flag on the decoded list.
+//
 // The share price's growth over a trailing window, annualised linearly
 // (× 365 / days of the window): what the vault actually returned, never a
 // target or a forecast. Arithmetic and log decoding only — no network, no
@@ -188,6 +195,10 @@ export type DepositLog =
       // always 18 dp. Kept as bigint so nothing is lost before the division.
       depositAmount: bigint;
       shareAmount: bigint;
+      // The lot's own clock. The average deposit cost has no use for it; the
+      // holder-history replay dates the lot by it, and the vesting term the
+      // solver prices against is measured from it.
+      depositTimestamp: number;
     }
   | { kind: "refund"; nonce: string };
 
@@ -200,7 +211,8 @@ export type DepositLog =
 // DepositRefunded(uint256 indexed nonce, bytes32 depositHash, address indexed user)
 //
 // The deposit's four unindexed fields are four data words; earnings needs the
-// first two. A refund carries nothing beyond the nonce it cancels.
+// first two and the history the third. A refund carries nothing beyond the
+// nonce it cancels.
 export function decodeDepositLog(log: RawLog): DepositLog {
   const nonce = BigInt(log.topics[1]).toString();
   if (log.topics[0].toLowerCase() === TOPIC_DEPOSIT_REFUNDED) {
@@ -215,6 +227,7 @@ export function decodeDepositLog(log: RawLog): DepositLog {
     asset: `0x${log.topics[3].slice(-40)}`,
     depositAmount: dataWord(log.data, 0),
     shareAmount: dataWord(log.data, 1),
+    depositTimestamp: Number(dataWord(log.data, 2)),
   };
 }
 

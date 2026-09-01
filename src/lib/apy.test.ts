@@ -364,6 +364,7 @@ const RAW_DEPOSIT_B: RawLog = {
   address: "0x0000000000000000000000000000000000000000",
   blockNumber: "0x188a7a2",
   logIndex: "0x0",
+  transactionHash: "0x68529fdd00000000000000000000000000000000000000000000000000000000",
   topics: [
     TOPIC_DEPOSIT,
     "0x0000000000000000000000000000000000000000000000000000000000000003",
@@ -409,6 +410,10 @@ const depositsOf = (wallet: string): DepositEntry[] =>
       asset,
       depositAmount: BigInt(depositAmount),
       shareAmount: BigInt(shareAmount),
+      // The average deposit cost does not read the lot's clock; the CSV the
+      // rows come from carries no timestamp, and one deposit per nonce is all
+      // these vectors turn on.
+      depositTimestamp: 0,
     })
   );
 const refundOf = (nonce: string): DepositLog => ({ kind: "refund", nonce });
@@ -422,6 +427,7 @@ describe("decodeDepositLog (spec §5.5)", () => {
       asset: USDC_ADDRESS.toLowerCase(), // topics[3], right-aligned in the word
       depositAmount: 4000000000n, // data word 0 — USDC, 6 dp
       shareAmount: 4001616653127863656917n, // data word 1 — always 18 dp
+      depositTimestamp: 1786466651, // data word 2 — the lot's own clock
     });
     // Raw log → average deposit cost → the rendered sub-line, end to end.
     const t = reconstructDeposits([log], DECIMALS);
@@ -439,6 +445,7 @@ describe("decodeDepositLog (spec §5.5)", () => {
       address: "0x0000000000000000000000000000000000000000",
       blockNumber: "0x188a7a2",
       logIndex: "0x1",
+      transactionHash: "0x68529fdd00000000000000000000000000000000000000000000000000000000",
       topics: [
         TOPIC_DEPOSIT_REFUNDED,
         "0x0000000000000000000000000000000000000000000000000000000000000003",

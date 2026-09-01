@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Hex } from "viem";
 import { usePublicClient } from "wagmi";
 
 import { CHAIN_ID } from "../config/chain";
 import { DEPOSIT_TOKENS } from "../config/tokens";
 import { TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED } from "../config/history";
 import { decodeDepositLog, reconstructDeposits, type DepositLog } from "../lib/apy";
-import { errorMessage, scanLogs } from "../lib/logScan";
+import { addressTopic, errorMessage, scanLogs } from "../lib/logScan";
 import {
   depositScanRange,
   planDepositScan,
@@ -80,12 +79,6 @@ const DEPOSIT_DECIMALS: Record<string, number> = Object.fromEntries(
   DEPOSIT_TOKENS.map((token) => [token.address.toLowerCase(), token.decimals])
 );
 
-// The wallet is topics[2] of both events (Deposit.receiver, DepositRefunded
-// .user), left-padded to a 32-byte word.
-function pad32(address: string): Hex {
-  return `0x${address.slice(2).toLowerCase().padStart(64, "0")}`;
-}
-
 // The wallet's Teller logs over one block range. Both event types come back
 // from a single request per chunk, because the wallet sits at the same topic
 // index in each.
@@ -99,7 +92,9 @@ function scanWallet(
   return scanLogs({
     client,
     address: vault.addresses.teller,
-    topics: [[TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED], null, pad32(wallet)],
+    // The wallet is topics[2] of both events (Deposit.receiver,
+    // DepositRefunded.user), left-padded to a 32-byte word.
+    topics: [[TOPIC_DEPOSIT, TOPIC_DEPOSIT_REFUNDED], null, addressTopic(wallet)],
     fromBlock,
     toBlock,
   });

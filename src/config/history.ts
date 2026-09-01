@@ -62,6 +62,18 @@ export const TOPIC_DEPOSIT =
 export const TOPIC_DEPOSIT_REFUNDED =
   "0xaf98ea774275cadfa3e477a7b52cba03e01197445a76bd5d0d561608708c3624";
 
+// The two the holder-history replay reads on top of them (src/lib/holderHistory.ts).
+// Computed from the solver's own ABIs and confirmed by clean decodes of the live
+// logs of both products in the entitlement wayfinder's ticket 03.
+// Transfer(address indexed from, address indexed to, uint256 amount)
+export const TOPIC_TRANSFER =
+  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+// AtomicRequestFulfilled(address indexed user, address indexed offerToken,
+// address indexed wantToken, uint256 offerAmountSpent, uint256 wantAmountReceived,
+// uint256 timestamp)
+export const TOPIC_FULFILLED =
+  "0xa4e3f90ef19273220b37cbbbcfe402a6eadd9559c54813b9be52ea0c9612d6c9";
+
 // How many eth_getLogs chunk requests the widget keeps in flight AT ONCE,
 // across every scan it is running. 4 was measured against QuickNode's 50 req/s
 // limit and 8 trips it outright (code -32007). On Polygon a full 30-day span is

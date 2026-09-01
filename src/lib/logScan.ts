@@ -23,6 +23,11 @@ export interface RawLog {
   data: Hex;
   blockNumber: Hex;
   logIndex: Hex;
+  // Which transaction emitted it. Every mined log has one, and the holder-history
+  // replay keys the fill share-leg exclusion on it (src/lib/holderHistory.ts): a
+  // batch fill moves several holders' shares in one transaction, so the pair
+  // (transaction, holder) is the only thing that tells a leg from a transfer.
+  transactionHash: Hex;
 }
 
 // eth_getLogs topic filter: a topic, any of a list of topics, or a wildcard.
@@ -64,6 +69,14 @@ export function chunkRanges(fromBlock: bigint, toBlock: bigint): [bigint, bigint
 // word each, in declaration order.
 export function dataWord(data: Hex | string, index: number): bigint {
   return BigInt(`0x${data.slice(2).slice(index * 64, (index + 1) * 64)}`);
+}
+
+// An address as an eth_getLogs topic filter: right-aligned in a 32-byte word,
+// which is how an indexed address is logged (src/lib/apy.ts reads them back the
+// same way). Lowercased, because the same address arrives spelled both ways and
+// a topic filter is matched byte for byte.
+export function addressTopic(address: string): Hex {
+  return `0x${address.slice(2).toLowerCase().padStart(64, "0")}`;
 }
 
 // Why a chain read failed, in the words most likely to help — a scan's chunk

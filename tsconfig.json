@@ -1,6 +1,14 @@
 {
   "compilerOptions": {
     "target": "ES2021",
+    // `vitest/globals` types the describe/it/expect the vendored solver suites in
+    // src/entitlement/ call as ambient globals. Those files are a byte-exact copy
+    // (src/entitlement/PROVENANCE.md) and may not be edited to add imports, so the
+    // typechecker is told about the globals instead — which keeps them typechecked
+    // rather than hidden from tsc. Matches vitest.entitlement.config.ts's
+    // `globals: true`. Explicit imports (node's fs/path) resolve as before: `types`
+    // governs only automatically-included global declarations.
+    "types": ["vitest/globals"],
     "useDefineForClassFields": true,
     "lib": ["ES2021", "DOM", "DOM.Iterable"],
     "module": "ESNext",
@@ -17,5 +25,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts", "vitest.entitlement.config.ts"]
 }

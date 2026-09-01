@@ -61,16 +61,29 @@ npm run dev              # http://localhost:5173
 ```
 
 ```bash
-npm run build            # tsc --noEmit + vite build
+npm run build             # tsc --noEmit + vite build
 npm run typecheck
-npm test                 # Vitest: the pure seams (yield figures, scan bookkeeping)
-npm run test:withdraw    # queueWithdraw 18-decimal overflow guard
+npm test                  # Vitest: the pure seams (yield figures, scan bookkeeping)
+npm run test:withdraw     # queueWithdraw 18-decimal overflow guard
+npm run test:entitlement  # the vendored solver suites, unmodified (2 files / 36 tests)
+npm run drift:entitlement # the vendored copy's bytes, then those suites
 ```
 
 `npm test` runs [Vitest](https://vitest.dev) over `src/**/*.test.ts` in a Node
 environment, through the app's own `vite.config.ts` — no DOM library and no
 component tests. `npm run test:withdraw` stays a plain Node script: it guards a
 packaged-library bug (see the caveats below) and is unrelated to the seams above.
+
+`src/entitlement/` is a **byte-exact vendored copy** of the redemption solver's entitlement
+rule and its two suites, pinned at `vault-solver-service@813aede` — every early-exit ceiling
+the widget quotes comes from it, and nothing in it may be edited here (see
+[`src/entitlement/PROVENANCE.md`](src/entitlement/PROVENANCE.md) and ADR-0003). Because those
+files are `*.spec.ts` and expect a runner's ambient globals, they run on their own
+`vitest.entitlement.config.ts`, and `npm test` is scoped to `src/**/*.test.ts` so it never
+picks them up. `npm run drift:entitlement` is the check that the copy is still faithful, in
+both halves: it re-hashes the four files against the SHA-1s in the provenance note (exiting
+non-zero naming any file whose bytes moved), then runs the suites unmodified. Run it on
+vendoring, after any TypeScript/Vitest bump, and when re-vendoring.
 
 The **Node ≥ 22.6** floor in `package.json`'s `engines` predates Vitest: the
 vectors used to import the TypeScript modules directly and needed Node's type

@@ -52,6 +52,16 @@ export interface PauseStatus {
   depositsPaused: boolean;
   withdrawalsPaused: boolean;
   anyPaused: boolean;
+  // The accountant's flag as a surface that PRICES must read it: true while the
+  // share price is under review, false while it is not, and null until this
+  // poll has answered at all. The booleans above default to "not paused" until
+  // then (see below), which is the right stance for gating a transaction and
+  // the wrong one for quoting a number — the auto-pause stores the
+  // out-of-bounds rate BEFORE pausing, so the unguarded rate the Lens serves
+  // while paused is the number under review, and a flag nobody has read yet is
+  // not permission to price against it (spec §"When the widget cannot price").
+  // Only the accountant: a paused queue blocks posting, not pricing.
+  pricingPaused: boolean | null;
   // When the accountant last posted a share price, in unix seconds; null until
   // the first poll resolves (or if it never has). Read off the accountantState()
   // poll above, so it costs no extra request and is at most 30 s stale.
@@ -104,6 +114,7 @@ export function usePauseStatus(vault: Vault): PauseStatus {
     depositsPaused: tellerPaused || accountantPaused,
     withdrawalsPaused: queuePaused || accountantPaused,
     anyPaused: tellerPaused || accountantPaused || queuePaused,
+    pricingPaused: data === undefined ? null : accountantPaused,
     lastSharePriceUpdateAt,
   };
 }

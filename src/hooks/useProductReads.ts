@@ -3,6 +3,7 @@ import type { Address } from "viem";
 
 import type { Vault, VaultRoster } from "../lib/vaultRegistry";
 import { useDepositHistory, type DepositHistory } from "./useDepositHistory";
+import { usePauseStatus, type PauseStatus } from "./usePauseStatus";
 import { useShareHistory, type ShareHistory } from "./useShareHistory";
 import { useUserPosition, type UserPosition } from "./useUserPosition";
 import { useVaultMetrics, type VaultMetrics } from "./useVaultMetrics";
@@ -30,6 +31,12 @@ export interface ProductReads {
   apys: WindowApys;
   position: UserPosition;
   depositHistory: DepositHistory;
+  // Every product's pause flags, not just the selected one's. The banner only
+  // ever names the product on screen, but the side rail's request row prices a
+  // live request OUTSIDE the selection (spec, "Request row (side rail, outside
+  // the selection)"), and nothing may be priced from a share price under
+  // review — so the flag has to exist for the product nobody is looking at.
+  pause: PauseStatus;
   // This product's open request in ITS OWN AtomicQueue. Every product's queue
   // is polled, not just the selected one's: the side rail lists open requests
   // across both, and a fill is announced whichever product filled.
@@ -51,6 +58,7 @@ export function useProductReads(
   onFilled?: (vault: Vault) => void
 ): ProductReads {
   const metrics = useVaultMetrics(vault);
+  const pause = usePauseStatus(vault);
   const history = useShareHistory(vault, selected);
   const position = useUserPosition(vault, address);
   // The position is the deposit scan's precondition AND its plan: a wallet
@@ -77,6 +85,7 @@ export function useProductReads(
   return {
     vault,
     metrics,
+    pause,
     history,
     apys,
     position,

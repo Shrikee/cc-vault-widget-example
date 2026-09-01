@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type JsonRpcSigner } from "ethers";
 import { ConnectKitButton } from "connectkit";
 
@@ -23,6 +23,7 @@ import {
   offerSharesOf,
   spreadPpmOf,
 } from "../lib/postingRule";
+import type { RequestRepost } from "../lib/requestRow";
 import { buildWithdrawQuote } from "../lib/withdrawQuote";
 import { AmountInput } from "./AmountInput";
 import { Modal } from "./Modal";
@@ -48,6 +49,8 @@ export function WithdrawPanel({
   paused,
   request,
   refetchRequest,
+  repost,
+  onRepostHandled,
   onSuccess,
 }: {
   // The product being redeemed from: its shares are offered, and the request
@@ -77,6 +80,12 @@ export function WithdrawPanel({
   // still has to say that submitting another one replaces it.
   request: WithdrawRequest | null;
   refetchRequest: () => void;
+  // A re-post asked for from the side rail's request row (src/lib/requestRow.ts),
+  // for THIS product. Null except in the moment one was asked for.
+  repost: RequestRepost | null;
+  // Called the instant it is taken up, so the ask is spent once: the panel must
+  // not re-fill the box behind a depositor who has since typed something else.
+  onRepostHandled: () => void;
   onSuccess: () => void;
 }) {
   const { isBoringV1ContextReady, queueWithdraw, withdrawStatus } =
@@ -213,12 +222,15 @@ export function WithdrawPanel({
   else if (validDaysInvalid)
     validationError = `Validity must be between 1 and ${MAX_VALID_DAYS} days.`;
 
+  // What has to be true before any post can go out, whatever is in the box: the
+  // library's provider ready, a signer on the right chain, nothing paused and
+  // the share lock ended. Split out from `canSubmit` because the re-post below
+  // has to ask it BEFORE an amount exists to ask about.
+  const canPost =
+    isBoringV1ContextReady && !!signer && rightChain && !paused && !locked;
+
   const canSubmit =
-    isBoringV1ContextReady &&
-    !!signer &&
-    rightChain &&
-    !paused &&
-    !locked &&
+    canPost &&
     parsed !== null &&
     !overShares &&
     !discountInvalid &&
@@ -228,6 +240,39 @@ export function WithdrawPanel({
     // largest amount that does price.
     !quote?.refused &&
     !busy;
+
+  // The side rail's re-post, granted. The row offers it only where a better
+  // post exists; nothing it printed is carried into the write. What happens
+  // here is that the box takes the request's own shares — the exact string that
+  // converts back to them — and the PINNED CONFIRM opens over those shares, so
+  // the ceiling, the spread and the ask are all recomputed at a block of its
+  // own before anything is signed. Posting then replaces the open request for
+  // the pair, which is stage 1's behaviour and the point of the offer.
+  //
+  // The SPREAD is this panel's, not the row's. The row quoted its button at the
+  // widget's default, which is all the side rail can see; a holder who has
+  // typed a wider one into the control below meant it, and the pin prices at
+  // theirs — so the two can differ, and what the modal pins is what goes to the
+  // queue. Never below the entitlement's required spread either way, which is
+  // the posting rule's whole point.
+  //
+  // Deliberately an event rather than a subscription: everything but `repost`
+  // is read at the instant the ask arrives, and the ask is spent in the same
+  // breath (`onRepostHandled`). The ref is what makes "spent" true rather than
+  // merely intended — an effect is invoked twice per mount under StrictMode,
+  // and a pin is a chain read, not a render. Where a post could not go out at
+  // all the box is still filled and the panel's own button explains itself,
+  // over the amount the depositor asked about.
+  const asked = useRef<RequestRepost | null>(null);
+  useEffect(() => {
+    if (!repost || asked.current === repost) return;
+    asked.current = repost;
+    onRepostHandled();
+    setAmount(repost.amount);
+    if (canPost && hasVestingGap(vault))
+      pin.open(repost.offerShares, holderSpreadPpm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repost]);
 
   // The one write this panel makes. `discountPercent` is the ONLY argument that
   // differs between the two paths, and it differs only in where the number came

@@ -3,10 +3,10 @@ import { useAccount } from "wagmi";
 
 import { useEthersSigner } from "./lib/boringVault";
 import { readsById, useRosterReads } from "./hooks/useProductReads";
-import { usePauseStatus } from "./hooks/usePauseStatus";
 import { useVaultSelection } from "./hooks/useVaultSelection";
 import { CHAIN_ID, CHAIN_LABEL } from "./config/chain";
 import { DEFAULT_VAULT_ID, ROSTER } from "./config/vaults";
+import type { RequestRepost } from "./lib/requestRow";
 import type { Vault } from "./lib/vaultRegistry";
 import { VaultWriteProvider } from "./providers";
 
@@ -38,6 +38,29 @@ export function App() {
 
   const [tab, setTab] = useState<Tab>("deposit");
 
+  // A re-post asked for from the side rail's request row: which product, and
+  // which shares. It is an ASK, not a post — the withdraw panel takes it into
+  // the pinned confirm, which prices those shares again at a block of its own,
+  // and clears this the moment it has. Held here because the row that offers it
+  // is outside the selection and outside the tabs, and the panel that posts is
+  // inside both: granting it means switching to that product's withdraw tab.
+  const [repost, setRepost] = useState<{
+    vaultId: string;
+    offer: RequestRepost;
+  } | null>(null);
+  const askRepost = useCallback(
+    // Named for the product the request is IN, the way `onFilled` above names
+    // the one that filled — and not `vault`, which is the selected product a
+    // few lines down and would be shadowed here. The selection follows it
+    // before the panel prices anything, exactly as a stop does.
+    (asked: Vault, offer: RequestRepost) => {
+      select(asked.id);
+      setTab("withdraw");
+      setRepost({ vaultId: asked.id, offer });
+    },
+    [select]
+  );
+
   const { show } = useToast();
 
   // Celebrate a solver fill (guide §9 FILLED): the request vanishing from the
@@ -65,14 +88,13 @@ export function App() {
   const {
     vault,
     metrics,
+    pause,
     history,
     apys,
     position,
     depositHistory,
     withdrawRequest,
   } = readsById(products, selectedId);
-
-  const pause = usePauseStatus(vault);
 
   // The browser tab names the selected product, like the header, hero and
   // footer do. A depositor comparing the two products has them open in two tabs
@@ -180,6 +202,11 @@ export function App() {
                     paused={pause.withdrawalsPaused}
                     request={withdrawRequest.request}
                     refetchRequest={withdrawRequest.refetch}
+                    // Only ever this product's own ask: the selection has
+                    // already followed it, and a panel remounted by that switch
+                    // reads it on mount.
+                    repost={repost?.vaultId === vault.id ? repost.offer : null}
+                    onRepostHandled={() => setRepost(null)}
                     onSuccess={refreshAll}
                   />
                 )}
@@ -206,6 +233,7 @@ export function App() {
               products={products}
               selectedId={selectedId}
               onSelect={select}
+              onRepost={askRepost}
               signer={signer}
               rightChain={rightChain}
             />

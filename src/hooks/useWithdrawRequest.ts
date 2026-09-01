@@ -10,6 +10,12 @@ import type { Vault } from "../lib/vaultRegistry";
 export interface WithdrawRequest {
   shares: number; // CCUSD shares offered for redemption
   minPrice: number; // min USDT the user accepts per share (atomicPrice)
+  // The same two figures undivided, exactly as the queue holds them. The floats
+  // above are what the row PRINTS; these are what it is JUDGED from, because a
+  // request is measured against the entitlement ceiling to the want unit and 18
+  // decimals do not survive a double (src/lib/requestRow.ts).
+  sharesRaw: bigint;
+  minPriceRaw: bigint;
   deadline: number; // unix seconds the request stays open until
   inSolve: boolean; // the solver is currently filling it
   // CCUSD allowance to the queue still covers the request. This vault's raw
@@ -139,6 +145,8 @@ export function useWithdrawRequest(
     request = {
       shares: Number(raw.offerAmount) / 10 ** vault.ui.decimals,
       minPrice: Number(raw.atomicPrice) / 10 ** WITHDRAW_TOKEN.decimals,
+      sharesRaw: raw.offerAmount,
+      minPriceRaw: raw.atomicPrice,
       deadline: Number(raw.deadline),
       inSolve: raw.inSolve,
       approved: allowance !== undefined && allowance >= raw.offerAmount,

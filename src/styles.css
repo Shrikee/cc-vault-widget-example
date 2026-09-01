@@ -607,6 +607,39 @@ a:hover {
 .request__meta .dot {
   opacity: 0.5;
 }
+/* The ask-vs-ceiling strip, on a product whose exits are priced against the
+   holder's entitlement: two lines, one number each, taking the place of the
+   min-out sub-line above. The edge colour is the comparison — the ceiling line
+   is the one that carries it, because the ask is only ever above or within it.
+   The prototype's own strip, in this stylesheet's names
+   (docs/wayfinder/entitlement/assets/04-surfaces-prototype/). */
+.request__strip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 8px;
+  font-size: 0.82rem;
+}
+.request__strip-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  border-left: 3px solid var(--border-strong);
+  padding-left: 8px;
+}
+.request__strip-line > span:first-child {
+  width: 76px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+.request__strip-line--above {
+  border-left-color: var(--danger);
+}
+.request__strip-line--within {
+  border-left-color: var(--success);
+}
+
 /* The vesting note under an open request on a product that vests. Sized like
    the meta line above it, since it is context and not a warning banner — the
    panels carry the warning, before the request is posted. */

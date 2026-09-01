@@ -2,7 +2,12 @@ import { useState } from "react";
 import { Contract, type JsonRpcSigner } from "ethers";
 
 import { explorerTx } from "../config/chain";
+import type { DepositHistory } from "../hooks/useDepositHistory";
+import type { PauseStatus } from "../hooks/usePauseStatus";
+import type { UserPosition } from "../hooks/useUserPosition";
+import type { VaultMetrics } from "../hooks/useVaultMetrics";
 import type { WithdrawRequestState } from "../hooks/useWithdrawRequest";
+import type { RequestRepost } from "../lib/requestRow";
 import type { Vault } from "../lib/vaultRegistry";
 import { RequestRow } from "./RequestRow";
 import { useToast } from "./Toaster";
@@ -26,12 +31,26 @@ const ERC20_APPROVE_ABI = [
 ];
 
 // The part of a product's reads this card uses, declared narrowly so the card
-// asks for no more than it shows — as the position card does.
+// asks for no more than it shows — as the position card does. It grew when the
+// row started judging a live request against the holder's entitlement: a
+// judgement is priced from four more reads than a row that only printed what
+// the queue held. All of them are reads this product already makes for its own
+// panel and position; the card adds none, and still takes nothing that WRITES.
 export interface ProductRedemption {
   // The product the request belongs to. Its name labels the row and its queue
   // is what a stop revokes the approval to, so the two can never be confused.
   vault: Vault;
   withdrawRequest: WithdrawRequestState;
+  // What the row's judgement is priced from, on a product whose exits are
+  // priced against the holder's entitlement: this wallet's holder history, its
+  // raw share balance, the raw share price, and whether that share price is
+  // under review. THIS product's, always — the card is outside the selection,
+  // and a row that borrowed the selected product's flags would judge one
+  // product's request by another's reads.
+  depositHistory: DepositHistory;
+  position: UserPosition;
+  metrics: VaultMetrics;
+  pause: PauseStatus;
 }
 
 export function RedemptionsCard({
@@ -39,6 +58,7 @@ export function RedemptionsCard({
   products,
   selectedId,
   onSelect,
+  onRepost,
   signer,
   rightChain,
 }: {
@@ -48,6 +68,11 @@ export function RedemptionsCard({
   // the product that is not on show switches to it first. See runStop.
   selectedId: string;
   onSelect: (id: string) => void;
+  // Re-post a request's shares: the selection follows the product, the withdraw
+  // tab opens, and its pinned confirm prices those shares again at a block of
+  // its own. Posting replaces the wallet's open request for the pair, which is
+  // stage 1's behaviour and the whole point of the offer.
+  onRepost: (vault: Vault, repost: RequestRepost) => void;
   signer: JsonRpcSigner | undefined;
   rightChain: boolean;
 }) {
@@ -62,9 +87,28 @@ export function RedemptionsCard({
   // not reshuffle under a depositor when one queue's poll resolves before the
   // other's. The selection is deliberately not consulted: the card exists
   // precisely so that what is on screen does not decide what money is visible.
-  const rows = products.flatMap(({ vault, withdrawRequest }) =>
-    withdrawRequest.request
-      ? [{ vault, request: withdrawRequest.request, refetch: withdrawRequest.refetch }]
+  const rows = products.flatMap((product) =>
+    product.withdrawRequest.request
+      ? [
+          {
+            vault: product.vault,
+            request: product.withdrawRequest.request,
+            refetch: product.withdrawRequest.refetch,
+            // The product's own reads, gathered here so the row itself makes
+            // none: it is handed what this product knows, or the nulls that say
+            // it does not know yet.
+            reads: {
+              history: product.depositHistory.history ?? null,
+              shareBalance: product.position.sharesRaw,
+              navPerShare: product.metrics.sharePriceRaw,
+              // The accountant's flag, read for this product and no other, and
+              // null until its poll has answered: a paused share price is the
+              // number under review, and pricing waits for an answer rather
+              // than assuming one (src/hooks/usePauseStatus.ts).
+              paused: product.pause.pricingPaused,
+            },
+          },
+        ]
       : []
   );
   // A queue that could not be read is not a queue with nothing in it. Saying
@@ -152,7 +196,7 @@ export function RedemptionsCard({
 
   return (
     <Card title="Open redemptions">
-      {rows.map(({ vault, request, refetch }) => (
+      {rows.map(({ vault, request, refetch, reads }) => (
         <div className="redemption" key={vault.id}>
           {/* The product's own name above its row: the row itself carries the
               share symbol, and between them a depositor holding requests in
@@ -162,8 +206,10 @@ export function RedemptionsCard({
           <RequestRow
             vault={vault}
             request={request}
+            reads={reads}
             busy={stopDisabled}
             onStop={() => runStop(vault, refetch)}
+            onRepost={(repost) => onRepost(vault, repost)}
           />
         </div>
       ))}

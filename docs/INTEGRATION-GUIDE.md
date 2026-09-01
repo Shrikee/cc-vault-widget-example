@@ -2,7 +2,7 @@
 
 > **Audience:** external developers integrating the Coinchange Boring Vault smart contracts into their own frontend.
 > **Reference implementation:** this repository — a complete, production-style React dApp you can run, read, and copy from.
-> **Scope:** the live **Yield Prime (CCUSD)** stablecoin vault on **Polygon PoS** (`chainId 137`): viewing the vault, depositing USDT, and redeeming shares through the **AtomicQueue**, which is filled by **Coinchange's own solver service**.
+> **Scope:** the live **Yield Prime (CCUSD)** stablecoin vault on **Polygon PoS** (`chainId 137`): viewing the vault, depositing USDT, and redeeming shares through the **AtomicQueue**, which is filled by **Coinchange's own solver service**. [§6.7](#67-pricing-an-early-30d-exit--the-entitlement-ceiling) additionally covers pricing an early exit on the sibling **Yield Prime 30d** (`CCUSD30`) product, whose vesting term outlives its share lock.
 >
 > Everything in this guide was verified against the deployed contracts and `boring-vault-ui@1.6.3` as shipped on npm.
 >
@@ -19,6 +19,7 @@
 5. [Path A — integrating with `boring-vault-ui@1.6.3`](#5-path-a--integrating-with-boring-vault-ui163)
 6. [Path B — direct contract integration (any stack)](#6-path-b--direct-contract-integration-any-stack)
    - [6.3 Yield figures from the contracts alone](#63-yield-figures-from-the-contracts-alone)
+   - [6.7 Pricing an early 30d exit — the entitlement ceiling](#67-pricing-an-early-30d-exit--the-entitlement-ceiling)
 7. [The redemption flow in depth (AtomicQueue)](#7-the-redemption-flow-in-depth-atomicqueue)
 8. [The Coinchange solver service — what fills your users' requests](#8-the-coinchange-solver-service--what-fills-your-users-requests)
 9. [Request lifecycle & UI state machine](#9-request-lifecycle--ui-state-machine)
@@ -402,6 +403,65 @@ event AtomicRequestFulfilled(address indexed user, address indexed offerToken, a
 
 Subscribe to `AtomicRequestFulfilled` filtered by your user (all three params are indexed) for a "your redemption of X CCUSD for Y USDT completed" toast, and poll `getUserAtomicRequest` (`offerAmount → 0`) as the ground truth.
 
+### 6.7 Pricing an early 30d exit — the entitlement ceiling
+
+**Which product this section is about.** Everything above describes **Yield Prime (CCUSD)**, whose 1-day vesting term equals its share lock. Coinchange runs a second product on the same contract set, the same solver and the same base asset — **Yield Prime 30d** (`CCUSD30`), vesting term 30 days — and there the two clocks come apart. Only that gap is new: except where noted below, every other section applies to the 30d product unchanged, with its own addresses (the reference app declares both products in [`src/config/vaults.json`](../src/config/vaults.json)).
+
+On **Yield Prime 30d** the vesting term (30 days) outlives the share lock (1 day), so shares can be redeemable before they vest. The solver prices every request against the holder's **entitlement ceiling** — unvested shares are capped at what was paid (`min(entry, NAV)` per lot, FIFO oldest first); vested shares price at NAV — and it can only **refuse** a request above the ceiling, never fill it lower. A request asking above the ceiling is skipped `ask-above-entitlement` every batch until its deadline lapses. Pricing the request is therefore the UI's job, and it must reach the solver's number exactly.
+
+**Vendor the rule; do not reimplement it.** The function is one dependency-free module in the solver's repository, built to be copied byte-for-byte: `vault-solver-service/src/core/entitlement.ts` (`quoteEntitlement`, plus the `HolderEvent` types), with its golden spec, 300-case regression suite and fixture JSON beside it. This repo carries the copy in `src/entitlement/` with `PROVENANCE.md` (source repo, commit `813aede`, four SHA-1s) and a two-half drift check: `npm run drift:entitlement` re-hashes the bytes and runs the vendored suites. The solver repo's `docs/RUNBOOK.md` §5.1 is the authoritative hand-off.
+
+**The seven inputs**, all from the contracts:
+
+| Input | Read |
+|---|---|
+| `history` | the event table below, from the vault's `eventsFromBlock` |
+| `shareBalance` | `vault.balanceOf(holder)` |
+| `navPerShare` | `accountant.getRateInQuoteSafe(want)` — its revert means the accountant is paused: price nothing |
+| `now` | a block's timestamp — the figure you **post** from must never be quoted off the browser clock (this widget prices per keystroke against the browser's, then re-pins every read above to one head block when the confirm modal opens) |
+| `vestingSeconds` | the product's declared vesting term (this repo: the vault registry) |
+| `offerShares` | the shares being sold, in raw 18-dp units |
+| `shareDecimals` | the share token's decimals (18) |
+
+**The event table.** Read three logs from the ledger floor, sort by `(blockNumber, logIndex)`:
+
+| Contract | Event | Becomes |
+|---|---|---|
+| Teller | `Deposit` (filter `receiver`) | `deposit { t = depositTimestamp (data word 2), shares, assets }` |
+| Share token | `Transfer` (unfiltered; keep the holder's legs) | `transfer-in { t = block time, shares, rate = accountant.getRateInQuote(want) at that block }` / `transfer-out { t, shares }` |
+| AtomicQueue | `AtomicRequestFulfilled` (filter `user`) | `fill { t = event timestamp, shares = offerAmountSpent }` |
+
+Exclude mints (`from == 0`), burns (`to == 0`), and the **fill share-leg**: the `Transfer` whose `(transactionHash, holder)` matches an `AtomicRequestFulfilled` in the same transaction — `AtomicQueue.solve` moves the shares by `safeTransferFrom`, so counting that transfer *and* the fill would spend the holder's lots twice. **Do not exclude refunded deposits in this reading**: a refund (`Teller.refundDeposit`) burns the shares — a burn `Transfer` you already exclude — and the solver's ledger keeps the `Deposit` lot. (For an *earnings* figure the refund exclusion of [§6.3](#63-yield-figures-from-the-contracts-alone) remains correct; the two readings differ deliberately.)
+
+**The floor invariant.** `eventsFromBlock` may only ever be raised to a block at least `vestingSeconds` old, or one below which the vault held no shares. The ledger calls whatever the post-floor events do not explain a **vested residual**; a floor bumped past `now − vestingSeconds` turns still-vesting money into a vested quote — above the solver's ceiling, a certain skip that looks right. This widget verifies it at runtime — the age arm always, the supply arm only on a young floor — once per vesting-gap product per session; verify it whenever you change the value.
+
+**Price and post.** The queue takes a discount, not a price, on its public path:
+
+```
+ceiling  := quoteEntitlement(query).maxAskPrice          // want units per whole share, floored
+required := ceil((NAV - ceiling) * 1_000_000n / NAV)     // ROUND UP — a floored discount can post
+                                                         // one want unit above the ceiling: a skip
+if required > 10_000n: refuse — no fillable price exists through the public path; say so
+posted   := max(holderSpreadPpm, required)
+queue.safeUpdateAtomicRequest(vault, want, { deadline, atomicPrice: 0, offerAmount, inSolve: false },
+                              accountant, discount = posted)
+// the queue stamps atomicPrice = floor(NAV * (1e6 - posted) / 1e6) at the posting block
+```
+
+Read the same `getRateInQuoteSafe(want)` for the formula that the queue reads for the stamp, at the block you post from, or a rate tick between read and post leaves the discount one tick short.
+
+**A request already too high.** Compare `queue.getUserAtomicRequest(holder, vault, want).atomicPrice` against the ceiling you computed and against a fresh post's ask; show which of five cases holds — above the share price (the rate fell), above the entitlement, expired, under-asking, within — and offer the re-post price, not just the complaint. The deadline sits beside the comparison, because the price alone cannot see it.
+
+**Re-vendoring — when the solver's rule or its `HolderEvent` shapes change.** More than re-running the drift check:
+
+1. Pin the new solver commit; copy the four files byte-exact again (no reformatting); record the new commit and SHA-1s in `src/entitlement/PROVENANCE.md`.
+2. Run both halves: `npm run drift:entitlement` — the hashes must match the new note, and the vendored suites (whatever their new count) must pass unmodified on the vendored config.
+3. **Diff the `HolderEvent` shapes and the query type.** A change there is not absorbed by the copy: the widget's history read produces those shapes, so a new field or event kind means the read (`holderHistory`, `transferReads`, the event table above) must change with it — re-verify the read against the solver's own ledger for real holders, the way the original hand-off did (the runbook section named above).
+4. Re-run the widget's own vectors (`npm test`): the lot-listing cross-check and the posting-rule vectors catch a rule change the shapes hide.
+5. If the rule's *economics* changed (the cap, the FIFO order, the boundary), treat it as a product change, not a refresh: the copy, the guide's numbers and the explainer's example all state the old rule.
+
+Reference implementation: [`src/entitlement/`](../src/entitlement/) (the vendored rule and its provenance note), [`src/lib/holderHistory.ts`](../src/lib/holderHistory.ts) (the event table above, as a pure replay), [`src/lib/walletScan.ts`](../src/lib/walletScan.ts) (the scan that feeds it), [`src/lib/postingRule.ts`](../src/lib/postingRule.ts) (the required and posted spreads, and the conversions to the wire), [`src/lib/lotListing.ts`](../src/lib/lotListing.ts) (the per-lot view, cross-checked against the rule's own ceiling) and [`src/lib/requestComparison.ts`](../src/lib/requestComparison.ts) (the five cases above). The `src/lib` modules are pinned by `npm test`, the vendored copy by `npm run drift:entitlement`.
+
 ---
 
 ## 7. The redemption flow in depth (AtomicQueue)
@@ -462,6 +522,7 @@ A request that isn't filled in one batch is not cancelled — it is simply recon
 | Share balance below `offerAmount` (user moved shares) | Show "invalid — shares no longer available". |
 | NAV marked down below the request's floor price ([§7.2](#72-the-price-is-pinned-at-posting-time)) | Show "repricing required — re-submit at current NAV". |
 | Vault's available USDT liquidity doesn't cover it yet | Show "queued — will fill as liquidity arrives". FIFO position is preserved. |
+| Ask above the holder's **entitlement ceiling** (30d: unvested shares are capped at what was paid) | Show the ceiling, say the request will be passed over until it lapses, and offer the re-post at `floor(NAV × (1e6 − max(spread, required)) / 1e6)`. This widget computes the ceiling client-side from the vendored rule ([§6.7](#67-pricing-an-early-30d-exit--the-entitlement-ceiling)); never post a new request above it. |
 
 Every condition above is checkable client-side from the on-chain reads in [§6.2](#62-reads) — your UI can always tell the user exactly why a request is waiting, with no dependency on any off-chain service.
 

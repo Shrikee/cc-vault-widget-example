@@ -19,16 +19,18 @@ The **vesting term** is the product's own clock and is not the share lock: on
 the 30d product shares unlock after a day but do not finish vesting for thirty,
 and a holder redeeming in between is entitled to no more than what they paid
 rather than to the share price on screen — a cap, not a floor. The 30d panels
-say so; pricing an early exit is stage 2 (ADR-0002).
+say so, and the widget prices that early exit against the cap itself — the
+design, its decisions and the numbers behind them are in
+[`docs/specs/priced-30d-exits.md`](./docs/specs/priced-30d-exits.md).
 
 > **📖 Integrating a Coinchange vault into your own frontend?** Start with the
 > [**Integration Guide**](./docs/INTEGRATION-GUIDE.md) — written against the 24h
-> product, and a comprehensive,
-> contract-verified walkthrough of the deposit and AtomicQueue redemption flows,
-> the Coinchange solver service that fills redemptions, both library-based and
-> direct-contract integration paths, and every known `boring-vault-ui@1.6.3`
-> caveat with its workaround. This repository is the reference implementation
-> that guide points into.
+> product, with §6.7 on pricing an early exit on the 30d one, and a
+> comprehensive, contract-verified walkthrough of the deposit and AtomicQueue
+> redemption flows, the Coinchange solver service that fills redemptions, both
+> library-based and direct-contract integration paths, and every known
+> `boring-vault-ui@1.6.3` caveat with its workaround. This repository is the
+> reference implementation that guide points into.
 
 It implements the full user surface for both products: view either, deposit
 **USDT** into it, and redeem via that product's own **AtomicQueue** (request →
@@ -63,7 +65,7 @@ npm run dev              # http://localhost:5173
 ```bash
 npm run build             # tsc --noEmit + vite build
 npm run typecheck
-npm test                  # Vitest: the pure seams (yield figures, scan bookkeeping)
+npm test                  # Vitest: the pure seams (yield figures, scans, the 30d price)
 npm run test:withdraw     # queueWithdraw 18-decimal overflow guard
 npm run test:entitlement  # the vendored solver suites, unmodified (2 files / 36 tests)
 npm run drift:entitlement # the vendored copy's bytes, then those suites
@@ -77,7 +79,8 @@ packaged-library bug (see the caveats below) and is unrelated to the seams above
 `src/entitlement/` is a **byte-exact vendored copy** of the redemption solver's entitlement
 rule and its two suites, pinned at `vault-solver-service@813aede` — every early-exit ceiling
 the widget quotes comes from it, and nothing in it may be edited here (see
-[`src/entitlement/PROVENANCE.md`](src/entitlement/PROVENANCE.md) and ADR-0003). Because those
+[`src/entitlement/PROVENANCE.md`](src/entitlement/PROVENANCE.md) and
+[the stage-2 spec](./docs/specs/priced-30d-exits.md)). Because those
 files are `*.spec.ts` and expect a runner's ambient globals, they run on their own
 `vitest.entitlement.config.ts`, and `npm test` is scoped to `src/**/*.test.ts` so it never
 picks them up. `npm run drift:entitlement` is the check that the copy is still faithful, in
@@ -187,10 +190,13 @@ USDT.
   request** action (the approval revoke of the integration guide's §7.4). The
   request itself is listed in the side rail's **Open redemptions** card, across
   both queues. A new request *replaces* the open one (the on-chain struct is
-  overwritten, not stacked). On the 30d product the panel states the vesting
-  term and that an earlier exit — entitled to no more than what was paid, a cap
-  and not a floor — may need a wider spread; an open or lapsed request in that
-  product says on the row itself that it can be passed over, and where to ask.
+  overwritten, not stacked). On the 30d product the widget prices the exit
+  itself: a quote card shows what the typed amount pays if filled today against
+  the holder's **entitlement ceiling** — computed from their on-chain history by
+  a byte-exact vendored copy of the solver's own rule (`src/entitlement/`,
+  drift-checked) — the request posts at the wider of the holder's spread and the
+  **required spread**, and a live request asking above the ceiling says so on the
+  row, with the price to re-post at offered as a button.
 - **Resilience** — network-switch banner, toasts driven off the live
   `depositStatus` / `withdrawStatus` objects with explorer links, refetch of
   everything after each successful write.
@@ -242,22 +248,72 @@ nothing outside those two panels depends on the library's context.
   (wallet switches, tail scans, failures).
 - `src/lib/requestFill.ts` — what it means for a redemption request to have
   vanished from a queue, and the several ways of vanishing that are not a fill.
+- `src/entitlement/` — the vendored solver rule (see above): every 30d ceiling
+  the widget quotes is this module's answer, never a reimplementation of it.
+- `src/lib/holderHistory.ts` — the pure replay behind that ceiling: raw Teller,
+  share-token and queue logs in, one wallet's holder history out, with the mint,
+  burn and fill-share-leg exclusions applied and the refunded deposit
+  deliberately kept; also which second-phase reads a transfer leg needs.
+- `src/lib/walletScan.ts` — one wallet's scan of one product: the log ranges,
+  the all-or-nothing block-time and rate reads, and the two derivations
+  (average deposit cost, holder history) taken over the whole raw set.
+- `src/lib/heldScan.ts` — where a settled scan and the block it reached are
+  held, so the confirm step tails from exactly where the scan stopped.
+- `src/lib/ledgerFloorCheck.ts` and `src/lib/floorSoundness.ts` — the read and
+  the verdict for the registry's ledger floor: a floor must be at least a
+  vesting term old, or hold no shares below it, before a residual lot may be
+  called vested.
+- `src/lib/pricedHistory.ts` — the floor verdict and the scan folded into one
+  answer: the history to price from, or the reason to say out loud instead —
+  and never a reason to block posting.
+- `src/lib/postingRule.ts` — the arithmetic between the ceiling and the queue:
+  the required spread (rounded up), the posted spread (the wider of it and the
+  holder's), the ask and payout it implies, and the conversions the wire takes.
+- `src/lib/lotListing.ts` — the holder's lots listed beside the vendored rule
+  and cross-checked against its own ceiling, plus the largest amount still
+  postable under the contract's 1% maximum.
+- `src/lib/withdrawQuote.ts` — the withdraw panel's whole model for the typed
+  amount: which card it is (none / locked / paused / unreadable / clamp /
+  quote), the receive and spread rows, and the post that would go out.
+- `src/lib/confirmPin.ts` and `src/lib/confirmRecheck.ts` — the figures pinned
+  to one block for the confirm modal, so what it shows is what is posted; and
+  the re-read on Confirm that re-pins rather than posts when the accountant
+  paused, the share price moved or the balance no longer covers.
+- `src/lib/requestComparison.ts` and `src/lib/requestRow.ts` — where a live
+  request's ask stands against the ceiling and the share price (exactly one of
+  five cases holds), and the row that says which, with the price to re-post at.
+- `src/lib/positionExit.ts` — the position card's one-line answer for the whole
+  balance, which is a different question from the panel's and is priced apart
+  from it.
+- `src/lib/explainerSteps.ts` — the "How it works" timeline as copy, with the
+  vesting step and its worked cap example only where a product has the gap.
+- `src/lib/figures.ts` — the one set of bigint→string formatters every priced
+  surface writes through, so two surfaces cannot round the same number
+  differently.
 - `src/hooks/*` — `useProductReads` (everything the widget reads about one
   product, assembled once per product), `useVaultSelection` (the URL side of the
   selection, holding no rules), `useVaultMetrics`, `useUserPosition`,
   `useWithdrawRequest` (one product's AtomicQueue, read on chain and polled —
   one instance per product, so both queues are watched), `useShareHistory` (the
   share-price scan behind one product's APYs), `useWindowApys`,
-  `useDepositHistory` (a wallet's average deposit cost in one product),
-  `usePauseStatus`, `useTokenBalance`, `useStatusToasts`, `useNow`.
+  `useDepositHistory` (a wallet's average deposit cost in one product, and the
+  holder history the 30d ceiling is quoted from), `useLedgerFloor` (the
+  once-per-session floor check), `useConfirmPin` (the pre-post tail and the
+  reads pinned to one head), `usePauseStatus`, `useTokenBalance`,
+  `useStatusToasts`, `useNow`.
 - `src/components/*` — custom UI, every vault-scoped one taking its vault as a
   prop: `VaultSwitcher` (the chips), `PositionCard` (both products),
   `RedemptionsCard` (open requests in both queues, outside the selection and the
-  tabs), `VestingNotice` (the 30d disclosure), and the rest.
+  tabs), `QuoteCard` (what an early 30d exit pays, per keystroke),
+  `PinnedConfirm` (the pinned confirm modal), `RequestRow` (a request's
+  lifecycle, and on the 30d product its judgement), `VestingNotice` (the 30d
+  disclosure), and the rest.
 - `src/lib/*.test.ts` — the vectors, driving the real modules: the APY,
   earnings and projection derivations, the scan bookkeeping, the registry parse,
-  the Lens reads, the selection resolution, the shared budget, and what a
-  vanished queue request does and does not mean.
+  the Lens reads, the selection resolution, the shared budget, what a vanished
+  queue request does and does not mean, and every seam of the 30d price — the
+  history replay, the spread and conversion rounding, the lot-listing
+  cross-check, the five-way comparison and the confirm re-check.
 
 ---
 

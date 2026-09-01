@@ -37,12 +37,19 @@ import {
   type LotView,
 } from "./lotListing";
 import {
+  formatPrice,
+  formatShares,
+  formatSpread,
+  formatWant,
+} from "./figures";
+import {
   amountStringOf,
   askPrice,
   offerSharesOf,
   payout,
   postedDiscount,
   requiredSpread,
+  type PostablePost,
 } from "./postingRule";
 
 const DAY = 86_400;
@@ -161,6 +168,17 @@ export interface WithdrawQuote {
   // fact behind the row's "(required)", which the panel also emphasises. A
   // number the holder did not choose deserves to be seen.
   spreadIsRequired: boolean;
+  // What a post for the amount in the box would carry (./postingRule.ts), or
+  // null wherever nothing is postable — an empty box, an amount above the
+  // balance, the lock, the clamp, and every state in which nothing could be
+  // priced. Null is the panel's whole test for "is there anything to confirm?".
+  //
+  // It is on the MODEL rather than re-derived by the panel because the confirm
+  // modal and the queue write must provably agree: the pin recomputes over
+  // these shares, the modal names this discount, and `formatDiscountPercent`
+  // writes that same number on the wire. Two conversions of one typed string
+  // is two chances to post an amount nobody was shown.
+  post: PostablePost | null;
   // The 1% clamp: the post button is disabled, with no override.
   refused: boolean;
   // Nothing could be priced: the share price is under review, or the history,
@@ -174,55 +192,6 @@ export interface WithdrawQuote {
   // nothing was asked for, no wrong figure is on screen, and no disclosure is
   // owed.
   cannotPrice: boolean;
-}
-
-// A non-negative bigint of `decimals` dp as a grouped decimal string, rounded
-// half-up to `maxDp` and trimmed to no fewer than `minDp` places. Every figure
-// on the card goes through this rather than through a double: a share balance
-// is an 18-dp bigint and a double holds about fifteen digits, so the amount a
-// depositor reads would not be the amount they posted.
-function decimalString(
-  units: bigint,
-  decimals: number,
-  minDp: number,
-  maxDp: number
-): string {
-  let scaled: bigint;
-  if (maxDp >= decimals) {
-    scaled = units * 10n ** BigInt(maxDp - decimals);
-  } else {
-    const div = 10n ** BigInt(decimals - maxDp);
-    const whole = units / div;
-    scaled = (units % div) * 2n >= div ? whole + 1n : whole;
-  }
-  const scale = 10n ** BigInt(maxDp);
-  let frac = maxDp > 0 ? (scaled % scale).toString().padStart(maxDp, "0") : "";
-  while (frac.length > minDp && frac.endsWith("0")) frac = frac.slice(0, -1);
-  const grouped = (scaled / scale)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return frac ? `${grouped}.${frac}` : grouped;
-}
-
-// A want amount as money — "9,999.99". Always two places: it is a payout.
-const formatWant = (units: bigint): string => decimalString(units, 6, 2, 2);
-
-// A price, want per whole share — "1.000600". Always all six places: the last
-// one is a whole want unit per share, and a want unit is the difference
-// between a request that fills and one the solver passes over.
-const formatPrice = (units: bigint): string => decimalString(units, 6, 6, 6);
-
-// A share amount — "10,000" / "999.878015".
-const formatShares = (units: bigint, decimals: number): string =>
-  decimalString(units, decimals, 0, 6);
-
-// A spread in the queue's ppm as a percent — 1000 → "0.10%", 1369 →
-// "0.1369%". Two places for a round tenth and four otherwise, because the
-// required spread is rarely a round tenth and "0.14%" is not the number that
-// was posted.
-function formatSpread(ppm: bigint): string {
-  const dp = Number(ppm) % 100 === 0 ? 2 : 4;
-  return `${(Number(ppm) / 10_000).toFixed(dp)}%`;
 }
 
 // A vest date — "21 Sept". en-GB because that is the form the spec's copy is
@@ -296,6 +265,7 @@ export function buildWithdrawQuote(inputs: QuoteInputs): WithdrawQuote {
       holderSpreadIsDefault ? " (default)" : ""
     }`,
     spreadIsRequired: false,
+    post: null,
     refused: false,
     cannotPrice: false,
   };
@@ -422,6 +392,9 @@ export function buildWithdrawQuote(inputs: QuoteInputs): WithdrawQuote {
     // the row is where they find that out.
     spread: `${formatSpread(posted.ppm)}${posted.isRequired ? " (required)" : ""}`,
     spreadIsRequired: posted.isRequired,
+    // The one place the two numbers a post is made of are settled — over the
+    // shares this card just priced, at the spread it just named.
+    post: { offerShares: sold, discountPpm: posted.ppm },
     refused: false,
     cannotPrice: false,
   };
@@ -494,6 +467,9 @@ function clamped(
     // The required spread is by definition the one that would post here — it is
     // just that it cannot be.
     spreadIsRequired: true,
+    // Nothing stands behind a refusal: the contract will not carry this
+    // discount, and a clamped one posts an ask above the ceiling.
+    post: null,
     // No override. The widget does not post what it can establish the solver
     // will skip, and this is the one state where it can establish exactly that.
     refused: true,

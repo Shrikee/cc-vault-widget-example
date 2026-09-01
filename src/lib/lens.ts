@@ -1,4 +1,13 @@
-// The shared Lens — every vault read the widget makes, and what it means.
+// Every vault read the widget makes, and what it means.
+//
+// TWO GROUPS, one reason to change. Most of it is the shared Lens: a stateless
+// view contract both products name, read with their own addresses as
+// arguments. The rest — at the bottom — is the confirm pin's, which goes to the
+// accountant and the share token DIRECTLY, because a pin needs to see what the
+// Lens smooths over and needs every figure at ONE block. Both groups are the
+// same thing to a reader: the places a vault's addresses become call
+// arguments, so "does this product read its own contracts?" is still answered
+// by reading one short file.
 //
 // The BoringVault Lens is a stateless view contract: each of its functions
 // takes the vault's own contracts as arguments and reads them. Both Coinchange
@@ -131,6 +140,135 @@ export const lensCalls = {
         abi: LENS_ABI,
         functionName: "userUnlockTime",
         args: user ? ([user, vault.addresses.teller] as const) : undefined,
+      },
+    ] as const,
+};
+
+// ---- the confirm pin ----
+//
+// The reads the CONFIRM STEP makes, which are not the Lens's.
+//
+//   • `getRateInQuoteSafe` is the GUARDED rate read. Its revert IS the answer:
+//     a paused accountant refuses to price, and a widget that pinned a rate
+//     from anywhere else would show a share price nobody is standing behind.
+//     (Its unguarded twin `getRateInQuote` is what src/lib/walletScan.ts reads
+//     for a past lot's entry price, deliberately — a transfer received during
+//     an old pause must still have one.)
+//   • `accountantState` carries `lastUpdateTimestamp` and `isPaused`, the two
+//     the Confirm re-check compares against.
+//
+//     A SECOND COPY of this twelve-field struct lives in
+//     src/hooks/usePauseStatus.ts, which polls it for the pause banner. That is
+//     a duplication and it is named here rather than excused: the accountant's
+//     layout is one fact, and two spellings of it can drift silently — the
+//     fields are positional, so a struct change makes the stale copy decode
+//     the WRONG field rather than fail. They must be changed together until
+//     the pause surfaces are rewritten (the "when the widget cannot price"
+//     ticket owns every one of them, and is where the two should become one).
+//     What is not the reason: the poll. The pin reads this at a pinned block
+//     and the banner reads it every 30 seconds, but that is a difference of
+//     CALL, not of fragment.
+//   • `balanceOf` is the vault share token's own, so the balance is pinned to
+//     the same block as the rate with no third contract in the path.
+export const ACCOUNTANT_ABI = [
+  {
+    type: "function",
+    name: "getRateInQuoteSafe",
+    stateMutability: "view",
+    inputs: [{ name: "quote", type: "address" }],
+    outputs: [{ name: "rate", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "accountantState",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [
+      { name: "payoutAddress", type: "address" },
+      { name: "highwaterMark", type: "uint96" },
+      { name: "feesOwedInBase", type: "uint128" },
+      { name: "totalSharesLastUpdate", type: "uint128" },
+      { name: "exchangeRate", type: "uint96" },
+      { name: "allowedExchangeRateChangeUpper", type: "uint16" },
+      { name: "allowedExchangeRateChangeLower", type: "uint16" },
+      { name: "lastUpdateTimestamp", type: "uint64" },
+      { name: "isPaused", type: "bool" },
+      { name: "minimumUpdateDelayInSeconds", type: "uint24" },
+      { name: "managementFee", type: "uint16" },
+      { name: "performanceFee", type: "uint16" },
+    ],
+  },
+] as const;
+
+export const SHARE_TOKEN_ABI = [
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "shares", type: "uint256" }],
+  },
+] as const;
+
+// The auto-generated getter returns the struct's fields flattened, in
+// declaration order. Two of them are read, and they are read through these two
+// functions rather than by index at the call site: an index is a number that
+// looks right in a diff whichever field it points at.
+export type AccountantState = readonly [
+  Address, bigint, bigint, bigint, bigint, number, number, bigint, boolean,
+  number, number, number
+];
+export const lastRateUpdate = (state: AccountantState): number => Number(state[7]);
+export const isAccountantPaused = (state: AccountantState): boolean => state[8];
+
+// Unlike `lensCalls` these carry no `chainId`: they are made through a public
+// client that is already pinned to the vault's chain and to ONE BLOCK, which is
+// the whole point of them — wagmi's `useReadContracts` needs to be told which
+// chain, a pinned `multicall` does not.
+export const pinCalls = {
+  // ONE BATCH, at one head block: the share price, the balance and the state
+  // the re-check will compare against. `allowFailure` is what makes the
+  // guarded rate's revert readable as the pause it is rather than as a thrown
+  // batch (src/lib/confirmPin.ts turns it into the wording).
+  pin: (vault: Vault, user: Address) =>
+    [
+      {
+        address: vault.addresses.accountant,
+        abi: ACCOUNTANT_ABI,
+        functionName: "getRateInQuoteSafe",
+        args: [vault.addresses.want],
+      },
+      {
+        address: vault.addresses.vault,
+        abi: SHARE_TOKEN_ABI,
+        functionName: "balanceOf",
+        args: [user],
+      },
+      {
+        address: vault.addresses.accountant,
+        abi: ACCOUNTANT_ABI,
+        functionName: "accountantState",
+        args: [],
+      },
+    ] as const,
+
+  // The ONE multicall on Confirm: `accountantState` and `balanceOf`, exactly
+  // the three facts the re-check predicate takes (./confirmRecheck.ts). The
+  // rate itself is not re-read — a moved `lastUpdateTimestamp` already says it
+  // moved, and re-reading it would invite pinning a second one.
+  recheck: (vault: Vault, user: Address) =>
+    [
+      {
+        address: vault.addresses.accountant,
+        abi: ACCOUNTANT_ABI,
+        functionName: "accountantState",
+        args: [],
+      },
+      {
+        address: vault.addresses.vault,
+        abi: SHARE_TOKEN_ABI,
+        functionName: "balanceOf",
+        args: [user],
       },
     ] as const,
 };

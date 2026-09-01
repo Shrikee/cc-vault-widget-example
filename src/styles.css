@@ -1088,3 +1088,21 @@ a:hover {
   line-height: 1.5;
   color: var(--text-dim);
 }
+
+/* confirm modal */
+
+/* The pinned tile: the amount, the payout and the block they were read at, set
+   above the rows as one sentence rather than three figures. It leads the modal
+   because it is the claim everything under it supports — these, and not the
+   panel's live figures, are what goes to the queue. */
+.pinned-tile {
+  margin-bottom: 12px;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(20, 184, 166, 0.35);
+  background: rgba(20, 184, 166, 0.08);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text);
+}

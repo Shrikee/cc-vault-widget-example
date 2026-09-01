@@ -3,6 +3,7 @@ import { usePublicClient } from "wagmi";
 
 import { CHAIN_ID } from "../config/chain";
 import type { HolderEvent } from "../entitlement/entitlement";
+import { dropScan, holdScan } from "../lib/heldScan";
 import { errorMessage } from "../lib/logScan";
 import {
   depositScanRange,
@@ -172,11 +173,22 @@ export function useDepositHistory(
   // of this product).
   const walletKey = useRef<string | null>(null);
 
+  // Drop the held logs AND what was published from them, together. They are one
+  // thing: the confirm step tails from the published cursor into the held logs
+  // (src/lib/heldScan.ts), so a cursor that outlived its logs would fold a tail
+  // into nothing and pin a history missing everything before it. Every place
+  // that resets one goes through here, which is what makes that impossible
+  // rather than merely intended.
+  const forgetHeld = useCallback((key: string | null) => {
+    scanned.current = NO_WALLET_SCAN;
+    if (key !== null) dropScan(key);
+  }, []);
+
   const forget = useCallback(() => {
+    forgetHeld(walletKey.current);
     walletKey.current = null;
     runs.current = forgetScans(runs.current);
-    scanned.current = NO_WALLET_SCAN;
-  }, []);
+  }, [forgetHeld]);
 
   // Perform one run, then do whatever settling it says to do next (the tail a
   // deposit asked for while this scan was still in flight).
@@ -218,6 +230,9 @@ export function useDepositHistory(
         const next = summarise(found, vault, address, cursor);
 
         scanned.current = found;
+        // Published for the confirm step's own tail: these exact logs, and the
+        // block they were read to (src/lib/heldScan.ts).
+        holdScan(scanKey(vault.id, address), found, cursor);
         const step = settleScan(runs.current, scan, cursor);
         runs.current = step.runs;
         setState(next);
@@ -231,14 +246,14 @@ export function useDepositHistory(
         // (the reducer clears its cursor and key), so the next legitimate
         // trigger — this wallet's own deposit, or an address change — can scan
         // again; a failed tail keeps everything up to its cursor.
-        if (scan.kind === "full") scanned.current = NO_WALLET_SCAN;
+        if (scan.kind === "full") forgetHeld(scanKey(vault.id, address));
         const step = abandonScan(runs.current, scan);
         runs.current = step.runs;
         setState({ status: "error", error: errorMessage(e) });
         if (step.run) perform(step.run);
       });
     },
-    [client, vault, address]
+    [client, vault, address, forgetHeld]
   );
 
   useEffect(() => {
@@ -273,6 +288,10 @@ export function useDepositHistory(
     // a hook instance handed a different vault must scan again rather than
     // report the other product's average deposit cost as this one's.
     const key = scanKey(vault.id, address);
+    // A switch to another wallet — or to another product — leaves the previous
+    // one's published scan behind, and nothing will ever tail it again.
+    if (walletKey.current !== null && walletKey.current !== key)
+      forgetHeld(walletKey.current);
     walletKey.current = key;
     const step = startScan(runs.current, key);
     runs.current = step.runs;
@@ -280,10 +299,20 @@ export function useDepositHistory(
     // time without invalidating the scan, and refetchTail covers those.
     if (!step.run) return;
 
-    scanned.current = NO_WALLET_SCAN;
+    forgetHeld(key);
     setState({ status: "loading" });
     runScan(step.run);
-  }, [client, vault, address, shares, unlockAt, positionError, forget, runScan]);
+  }, [
+    client,
+    vault,
+    address,
+    shares,
+    unlockAt,
+    positionError,
+    forget,
+    forgetHeld,
+    runScan,
+  ]);
 
   const refetchTail = useCallback(() => {
     const key = walletKey.current;
@@ -295,11 +324,11 @@ export function useDepositHistory(
     // Nothing left to resume from — a scan that failed. The wallet is scanned
     // from the start again, which is why the figure goes back to loading.
     if (step.run.kind === "full") {
-      scanned.current = NO_WALLET_SCAN;
+      forgetHeld(key);
       setState({ status: "loading" });
     }
     runScan(step.run);
-  }, [client, address, runScan]);
+  }, [client, address, forgetHeld, runScan]);
 
   return { ...state, refetchTail };
 }

@@ -286,6 +286,26 @@ describe("formatDiscountPercent", () => {
     expect(formatDiscountPercent(0n)).toBe("0");
   });
 
+  it("is byte-for-byte what stage 1 posted, for every value the control holds", () => {
+    // A VESTED holder's required spread is zero, so `postedDiscount` returns
+    // their own spread and this string is the only thing between the control
+    // and the wire. Stage 1 wrote `String(Number(typed))` there; if this wrote
+    // anything else, a vested holder's request would stop being byte-identical
+    // to the one the same panel posted yesterday.
+    //
+    // Over every value the control can hold: 0 to the 1% maximum, at the 4 dp
+    // the queue's ppm can express.
+    for (let d = 0; d <= 10_000; d++) {
+      const typed = String(d / 1e4);
+      expect(formatDiscountPercent(spreadPpmOf(Number(typed)))).toBe(
+        // Stage 1's own argument, spelled the way stage 1 spelled it.
+        String(Number(typed))
+      );
+    }
+    // The panel's default, named rather than left to the loop above.
+    expect(formatDiscountPercent(spreadPpmOf(0.1))).toBe(String(0.1));
+  });
+
   it("survives the library's × 10⁴ → toFixed(0) for every d in 0..10000", () => {
     // The spec's claim, re-run here against the INSTALLED bignumber.js rather
     // than trusted: what the modal shows is what the queue is handed, for every

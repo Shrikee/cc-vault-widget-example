@@ -4,6 +4,7 @@ import { ConnectKitButton } from "connectkit";
 
 import { useBoringVaultV1 } from "../lib/boringVault";
 import { useStatusToasts } from "../hooks/useStatusToasts";
+import { useConfirmPin } from "../hooks/useConfirmPin";
 import { useNow } from "../hooks/useNow";
 import type { WithdrawRequest } from "../hooks/useWithdrawRequest";
 import { explorerAddress } from "../config/chain";
@@ -16,10 +17,16 @@ import { WITHDRAW_TOKEN } from "../config/tokens";
 import type { HolderEvent } from "../entitlement/entitlement";
 import { hasVestingGap, type Vault } from "../lib/vaultRegistry";
 import { formatAmount, parseAmount, shortAddress } from "../lib/format";
-import { amountStringOf, spreadPpmOf } from "../lib/postingRule";
+import {
+  amountStringOf,
+  formatDiscountPercent,
+  offerSharesOf,
+  spreadPpmOf,
+} from "../lib/postingRule";
 import { buildWithdrawQuote } from "../lib/withdrawQuote";
 import { AmountInput } from "./AmountInput";
 import { Modal } from "./Modal";
+import { PinnedConfirm } from "./PinnedConfirm";
 import { QuoteCard } from "./QuoteCard";
 import { VestingNotice } from "./VestingNotice";
 import { Button, InlineError } from "./ui";
@@ -118,6 +125,25 @@ export function WithdrawPanel({
       validDaysNum <= 0 ||
       validDaysNum > MAX_VALID_DAYS);
 
+  // The spread control in the queue's own units, settled ONCE: the quote card
+  // prices at it, the pin recomputes at it, and the wire carries whatever the
+  // two of them agreed on. A value the control itself rejects is not priced
+  // from — the panel's own error says so — so it falls back to the default
+  // rather than pricing off junk.
+  const holderSpreadPpm = spreadPpmOf(
+    discountInvalid ? WITHDRAW_DISCOUNT_PCT_DEFAULT : discountNum
+  );
+
+  // The confirm step's own reads (src/hooks/useConfirmPin.ts). Called on every
+  // product, as a hook must be; only a product that prices an exit ever opens
+  // it, and on any other it holds "closed" and reads nothing.
+  const pin = useConfirmPin(vault, address, {
+    vestingSeconds: vault.vestingSeconds,
+    shareDecimals: vault.ui.decimals,
+    shareSymbol,
+    wantSymbol,
+  });
+
   // Minimum you accept: NAV per share less the spread, times shares. Stage 1's
   // estimate, and still what a product with no vesting gap shows — there every
   // share prices at the share price, so this IS the number.
@@ -148,17 +174,36 @@ export function WithdrawPanel({
         shareLockSeconds: vault.ui.shareLockPeriod,
         shareDecimals: vault.ui.decimals,
         amount,
-        // The spread control in the queue's own units. A value the control
-        // itself rejects is not quoted from — the panel's own error says so —
-        // so the quote falls back to the default rather than pricing off junk.
-        holderSpreadPpm: spreadPpmOf(
-          discountInvalid ? WITHDRAW_DISCOUNT_PCT_DEFAULT : discountNum
-        ),
+        holderSpreadPpm,
         holderSpreadIsDefault: !discount.trim() || discountInvalid,
         shareSymbol,
         wantSymbol,
       })
     : null;
+
+  // What a post would carry, and the whole test for whether there is anything
+  // to PIN. It is null on a product that prices no exit, on an amount nothing
+  // would post, and in every state where the widget could not price at all —
+  // and there posting stays OPEN at the holder's own spread (ADR-0003: the
+  // widget never gates a post on its own reads), through stage 1's modal and
+  // stage 1's write, disclosed by the notice above.
+  const pinnable = quote?.post ?? null;
+
+  // Whether a modal is open is the CONFIRM STEP's own state, never a live
+  // figure's: `pinnable` is recomputed from a polled share price, and a tick
+  // into the clamp mid-confirm would otherwise close a pinned modal with no
+  // wording while its pin was still in flight. Exactly one of the two is ever
+  // opened, so `pinning` also says which body to render.
+  const pinning = pin.status !== "closed";
+
+  const openConfirm = () => {
+    if (pinnable) pin.open(pinnable.offerShares, holderSpreadPpm);
+    else setConfirm(true);
+  };
+  const closeConfirm = () => {
+    pin.close();
+    setConfirm(false);
+  };
 
   let validationError: string | null = null;
   if (parsed === null && amount.trim()) validationError = "Enter a valid share amount.";
@@ -184,9 +229,11 @@ export function WithdrawPanel({
     !quote?.refused &&
     !busy;
 
-  async function runRequest() {
-    setConfirm(false);
-    if (!signer || parsed === null) return;
+  // The one write this panel makes. `discountPercent` is the ONLY argument that
+  // differs between the two paths, and it differs only in where the number came
+  // from: stage 1 reads the control, the priced path reads what the pin showed.
+  async function post(discountPercent: string) {
+    if (!signer) return;
     await queueWithdraw(
       signer,
       // The string as it was typed, not a round trip through a double: the
@@ -194,12 +241,42 @@ export function WithdrawPanel({
       // exact balance would lose its last digits through `String(parsed)`.
       amount.trim(),
       WITHDRAW_TOKEN,
-      String(discountNum),
+      discountPercent,
       String(validDaysNum)
     );
     setAmount("");
     refetchRequest();
     onSuccess();
+  }
+
+  // Stage 1's, and still every unpriced product's: the control's own spread,
+  // written the way stage 1 writes it.
+  async function runRequest() {
+    setConfirm(false);
+    if (parsed === null) return;
+    await post(String(discountNum));
+  }
+
+  // The priced product's. Confirm re-reads ONCE before anything is signed: if
+  // the share price moved, the accountant paused, or the balance no longer
+  // covers, the figures are pinned again and shown — never posted
+  // (src/hooks/useConfirmPin.ts).
+  async function runPinnedRequest() {
+    // The shares this panel believes it is posting go INTO the re-check, so a
+    // box that somehow moved re-pins over the new amount and says so rather
+    // than being discovered afterwards.
+    const posted = await pin.confirm(offerSharesOf(amount, vault.ui.decimals));
+    // Re-pinned, or dismissed under the read. Either way the modal says what
+    // happened and nothing is signed.
+    if (posted === null) return;
+    pin.close();
+    // `String(d / 1e4)`, which the library's × 10⁴ → toFixed(0) round-trips
+    // losslessly for every d in 0..10000 (src/lib/postingRule.ts, and
+    // scripts/queue-withdraw-regression.cjs over the real compiled write). A
+    // vested holder's required spread is 0, so their own spread wins and this
+    // is byte-for-byte stage 1's argument; an unvested holder's is the one
+    // their entitlement requires.
+    await post(formatDiscountPercent(posted.discountPpm));
   }
 
   const effectiveSpread = discount.trim()
@@ -219,7 +296,11 @@ export function WithdrawPanel({
         maxExact={maxExact}
         unit={shareSymbol}
         maxLabel="Your shares"
-        disabled={busy || !address || locked}
+        // Frozen while a confirm modal is open: the figures in it were pinned
+        // over the amount in this box, and a keystroke reaching it behind the
+        // overlay would leave the two disagreeing about the one number that
+        // matters.
+        disabled={busy || !address || locked || pinning || confirm}
       />
 
       {/* Between the amount and the rows: the answer to the question the
@@ -350,62 +431,121 @@ export function WithdrawPanel({
           block
           loading={withdrawStatus.loading}
           disabled={!canSubmit}
-          onClick={() => setConfirm(true)}
+          onClick={openConfirm}
         >
           Request redemption
         </Button>
       )}
 
+      {/* The confirm step. On a product that prices an exit against the holder's
+          entitlement it is a READ before it is a dialog: opening it pins the
+          share price, the balance and the clock to one block, recomputes the
+          ceiling and the discount over exactly the shares that would be
+          offered, and shows them with the block number. Confirm re-reads once
+          and re-pins rather than post if anything moved. Everywhere else it is
+          stage 1's modal, unchanged. */}
       <Modal
-        open={confirm}
-        onClose={() => setConfirm(false)}
+        open={pinning || confirm}
+        onClose={closeConfirm}
         title="Confirm redemption request"
         footer={
-          <>
-            <Button variant="ghost" onClick={() => setConfirm(false)}>
-              Cancel
+          // A pin that could not be taken replaces Confirm with Close: there is
+          // nothing to confirm, and nothing was pinned to confirm it against.
+          pinning && pin.pin?.kind === "cannot-pin" ? (
+            <Button variant="ghost" onClick={closeConfirm}>
+              Close
             </Button>
-            <Button onClick={runRequest}>Confirm request</Button>
-          </>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={closeConfirm}>
+                Cancel
+              </Button>
+              <Button
+                loading={pinning && pin.status !== "ready"}
+                disabled={pinning && pin.pin?.kind !== "pinned"}
+                onClick={pinning ? runPinnedRequest : runRequest}
+              >
+                Confirm request
+              </Button>
+            </>
+          )
         }
       >
-        <div className="rows">
-          <div className="row">
-            <span>Redeem</span>
-            <span>
-              {formatAmount(parsed, 4)} {shareSymbol}
-            </span>
-          </div>
-          <div className="row">
-            <span>Receive (min)</span>
-            <span>
-              {estMinOut === null ? "—" : `${formatAmount(estMinOut, 2)} ${wantSymbol}`}
-            </span>
-          </div>
-          <div className="row">
-            <span>Spread</span>
-            <span>{effectiveSpread}</span>
-          </div>
-          <div className="row">
-            <span>Valid for</span>
-            <span>{effectiveValidity}</span>
-          </div>
-          <div className="row">
-            <span>Approve shares to</span>
-            <a
-              href={explorerAddress(vault.addresses.queue)}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {shortAddress(vault.addresses.queue)}
-            </a>
-          </div>
-        </div>
-        <p className="muted small">
-          You may be asked to sign twice: first to approve {shareSymbol}, then to
-          submit the request. An off-chain solver fills it and sends you{" "}
-          {wantSymbol} — there is no separate claim step.
-        </p>
+        {pinning ? (
+          <PinnedConfirm
+            status={pin.status}
+            pin={pin.pin}
+            notice={pin.notice}
+            // Stage 1's signing note, minus the six words that promise a
+            // fill: "an off-chain solver fills it and sends you USDT" is
+            // exactly what the pinned footer below exists to withhold. What it
+            // keeps is the mechanics, which are as true here as ever.
+            note={
+              <p className="muted small">
+                You may be asked to sign twice: first to approve {shareSymbol},
+                then to submit the request. There is no separate claim step —
+                the {wantSymbol} arrives with the fill.
+              </p>
+            }
+          >
+            <div className="row">
+              <span>Valid for</span>
+              <span>{effectiveValidity}</span>
+            </div>
+            <div className="row">
+              <span>Approve shares to</span>
+              <a
+                href={explorerAddress(vault.addresses.queue)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {shortAddress(vault.addresses.queue)}
+              </a>
+            </div>
+          </PinnedConfirm>
+        ) : (
+          <>
+            <div className="rows">
+              <div className="row">
+                <span>Redeem</span>
+                <span>
+                  {formatAmount(parsed, 4)} {shareSymbol}
+                </span>
+              </div>
+              <div className="row">
+                <span>Receive (min)</span>
+                <span>
+                  {estMinOut === null
+                    ? "—"
+                    : `${formatAmount(estMinOut, 2)} ${wantSymbol}`}
+                </span>
+              </div>
+              <div className="row">
+                <span>Spread</span>
+                <span>{effectiveSpread}</span>
+              </div>
+              <div className="row">
+                <span>Valid for</span>
+                <span>{effectiveValidity}</span>
+              </div>
+              <div className="row">
+                <span>Approve shares to</span>
+                <a
+                  href={explorerAddress(vault.addresses.queue)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {shortAddress(vault.addresses.queue)}
+                </a>
+              </div>
+            </div>
+            <p className="muted small">
+              You may be asked to sign twice: first to approve {shareSymbol},
+              then to submit the request. An off-chain solver fills it and sends
+              you {wantSymbol} — there is no separate claim step.
+            </p>
+          </>
+        )}
       </Modal>
     </div>
   );

@@ -146,6 +146,19 @@ export function amountStringOf(units: bigint, decimals: number): string {
   return frac ? `${whole}.${frac}` : `${whole}`;
 }
 
+// The two numbers a post is made of: the shares the library's conversion turns
+// the typed amount into, and the discount that goes on the wire.
+//
+// They travel together because they are only true together — a discount is
+// computed over an amount, and an amount priced at some other discount is a
+// different request. Carrying them as one value is what lets the quote card,
+// the confirm pin and `queueWithdraw` be handed the same object rather than
+// each deriving its own half.
+export interface PostablePost {
+  offerShares: bigint;
+  discountPpm: bigint;
+}
+
 // The discount as the library's `discountPercent` argument: a percent string.
 //
 // The library multiplies it by 10⁴ through bignumber.js and takes `toFixed(0)`,

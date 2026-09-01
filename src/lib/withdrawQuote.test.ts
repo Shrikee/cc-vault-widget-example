@@ -411,3 +411,68 @@ describe("when nothing can be priced", () => {
     expect(quote.cannotPrice).toBe(false);
   });
 });
+
+// What the confirm modal pins and the wire carries. The model used to expose
+// formatted strings alone, which left the panel to convert the amount and pick
+// the spread a SECOND time on its way to `queueWithdraw` — two derivations of
+// one number, and nothing to prove they agree. They are on the model now, so
+// "what the modal shows is what is posted" is a fact about one object.
+describe("the post the quote stands behind", () => {
+  it("carries the exact shares and the exact discount", () => {
+    // The worked example: the holder's own 0.1% is wider than the 0.04% the
+    // entitlement requires, so it is what posts — byte-identical to stage 1.
+    expect(buildWithdrawQuote(mixed()).post).toEqual({
+      offerShares: 10_000n * SHARE,
+      discountPpm: 1_000n,
+    });
+  });
+
+  it("carries the required spread when that is the one that posts", () => {
+    // The spec's "0.1369% (required)": one 20-day-old lot at 1.000000 quoted
+    // against a share price of 1.001370.
+    const quote = buildWithdrawQuote(
+      inputs([deposit(ago(20), 10_000, 1_000_000n)], 1_001_370n, "10000")
+    );
+    expect(quote.spreadIsRequired).toBe(true);
+    expect(quote.post).toEqual({
+      offerShares: 10_000n * SHARE,
+      discountPpm: 1_369n,
+    });
+  });
+
+  it("carries the shares the string converts to, not the string", () => {
+    // A 19th decimal the library drops must not reach the wire as shares the
+    // holder does not hold.
+    expect(buildWithdrawQuote(mixed("6000.0000000000000000009")).post).toEqual({
+      offerShares: 6_000n * SHARE,
+      discountPpm: 1_000n,
+    });
+  });
+
+  it("stands behind nothing where nothing is postable", () => {
+    // Every state in which the button is dead or the box is empty. A post
+    // offered here would be a post the card never priced.
+    expect(buildWithdrawQuote(mixed("")).post).toBeNull();
+    expect(buildWithdrawQuote(mixed("10000.000000000000000001")).post).toBeNull();
+    expect(
+      buildWithdrawQuote(
+        inputs([deposit(ago(45), 6_000, 1_000_000n)], 1_001_000n, "6000", {
+          paused: true,
+        })
+      ).post
+    ).toBeNull();
+    expect(
+      buildWithdrawQuote(
+        inputs([deposit(NOW - 3_600, 5_000, 1_000_000n)], 1_000_400n, "5000", {
+          unlockAt: NOW + 18 * 3_600,
+        })
+      ).post
+    ).toBeNull();
+    // The clamp: refused, and so nothing stands behind it.
+    const clamped = buildWithdrawQuote(
+      inputs([deposit(ago(5), 10_000, 1_000_000n)], 1_015_000n, "10000")
+    );
+    expect(clamped.refused).toBe(true);
+    expect(clamped.post).toBeNull();
+  });
+});

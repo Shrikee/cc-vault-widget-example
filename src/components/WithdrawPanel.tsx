@@ -15,6 +15,7 @@ import {
 import { WITHDRAW_TOKEN } from "../config/tokens";
 import type { Vault } from "../lib/vaultRegistry";
 import { formatAmount, parseAmount, shortAddress } from "../lib/format";
+import { amountStringOf } from "../lib/postingRule";
 import { AmountInput } from "./AmountInput";
 import { Modal } from "./Modal";
 import { VestingNotice } from "./VestingNotice";
@@ -28,6 +29,7 @@ export function WithdrawPanel({
   signer,
   address,
   shares,
+  sharesRaw,
   shareValue,
   unlockAt,
   rightChain,
@@ -42,6 +44,8 @@ export function WithdrawPanel({
   signer: JsonRpcSigner | undefined;
   address?: `0x${string}`;
   shares: number | null;
+  // The same balance undivided. MAX types this, not the float beside it.
+  sharesRaw: bigint | null;
   shareValue: number | null;
   unlockAt: number | null;
   rightChain: boolean;
@@ -77,6 +81,11 @@ export function WithdrawPanel({
 
   const locked = unlockAt !== null && now < unlockAt;
   const parsed = parseAmount(amount);
+  // What MAX types: the whole balance to the wei. An 18-dp balance has more
+  // significant digits than a double holds, so "all" taken from `shares` would
+  // quote and post slightly less than the wallet holds.
+  const maxExact =
+    sharesRaw !== null ? amountStringOf(sharesRaw, vault.ui.decimals) : null;
   const overShares = parsed !== null && shares !== null && parsed > shares;
 
   const discountNum = discount.trim() ? Number(discount) : WITHDRAW_DISCOUNT_PCT_DEFAULT;
@@ -126,7 +135,10 @@ export function WithdrawPanel({
     if (!signer || parsed === null) return;
     await queueWithdraw(
       signer,
-      String(parsed),
+      // The string as it was typed, not a round trip through a double: the
+      // library converts it exactly (× 10^decimals, truncated), and MAX's
+      // exact balance would lose its last digits through `String(parsed)`.
+      amount.trim(),
       WITHDRAW_TOKEN,
       String(discountNum),
       String(validDaysNum)
@@ -150,6 +162,7 @@ export function WithdrawPanel({
         value={amount}
         onChange={setAmount}
         max={shares}
+        maxExact={maxExact}
         unit={shareSymbol}
         maxLabel="Your shares"
         disabled={busy || !address || locked}

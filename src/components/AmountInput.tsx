@@ -4,6 +4,7 @@ export function AmountInput({
   value,
   onChange,
   max,
+  maxExact,
   unit,
   maxLabel = "Balance",
   disabled,
@@ -11,10 +12,20 @@ export function AmountInput({
   value: string;
   onChange: (v: string) => void;
   max: number | null;
+  // What MAX should type, when the exact figure has more significant digits
+  // than `max` can hold — a share balance is an 18-dp bigint and a double keeps
+  // about fifteen digits, so "all" typed from the float can be a few wei short
+  // of the balance, leaving dust that cannot be redeemed. Falls back to `max`
+  // where there is no exact string (the deposit panel's token balance).
+  maxExact?: string | null;
   unit: string;
   maxLabel?: string;
   disabled?: boolean;
 }) {
+  const fillMax = () => {
+    if (maxExact) return onChange(maxExact);
+    if (max !== null) onChange(String(max));
+  };
   return (
     <div className="amount">
       <div className="amount__row">
@@ -35,7 +46,7 @@ export function AmountInput({
           type="button"
           className="amount__max"
           disabled={disabled || max === null || max <= 0}
-          onClick={() => max !== null && onChange(String(max))}
+          onClick={fillMax}
         >
           MAX
         </button>
@@ -46,7 +57,7 @@ export function AmountInput({
           type="button"
           className="linklike"
           disabled={disabled || max === null}
-          onClick={() => max !== null && onChange(String(max))}
+          onClick={fillMax}
         >
           {max === null ? "—" : `${formatAmount(max)} ${unit}`}
         </button>

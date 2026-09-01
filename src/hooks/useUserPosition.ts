@@ -7,6 +7,11 @@ import type { Vault } from "../lib/vaultRegistry";
 
 export interface UserPosition {
   shares: number | null;
+  // The same balance in raw share units — null exactly when `shares` is. Every
+  // figure on screen reads the float; everything that is POSTED reads this,
+  // because 18 decimals do not survive a double and a redemption is exact: MAX
+  // offers the whole balance to the wei (src/lib/postingRule.ts).
+  sharesRaw: bigint | null;
   // unix seconds; shares locked until this time. 0 ⇒ the wallet has never
   // deposited. null while it is not known for the address asked about.
   unlockAt: number | null;
@@ -45,6 +50,7 @@ export function useUserPosition(vault: Vault, address?: Address): UserPosition {
 
   return {
     shares: figures?.shares ?? null,
+    sharesRaw: figures?.sharesRaw ?? null,
     unlockAt: figures?.unlockAt ?? null,
     loading: query.isFetching,
     error: query.error ? errorMessage(query.error) : null,

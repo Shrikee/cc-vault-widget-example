@@ -171,6 +171,7 @@ export function App() {
                     signer={signer}
                     address={address}
                     shares={position.shares}
+                    sharesRaw={position.sharesRaw}
                     shareValue={metrics.shareValue}
                     unlockAt={position.unlockAt}
                     rightChain={rightChain}

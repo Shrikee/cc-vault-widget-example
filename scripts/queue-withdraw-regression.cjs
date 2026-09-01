@@ -16,10 +16,26 @@
 // ethers Wallet over an in-process mock JSON-RPC transport. No network, no
 // chain, deterministic.
 //
+// It also drives the OTHER end of the same call — the discount. Stage 2 posts
+// the entitlement's required spread when it is wider than the holder's own, and
+// that spread is a ppm integer the widget hands over as a percent STRING
+// (`String(d / 1e4)`, src/lib/postingRule.ts `formatDiscountPercent`), which the
+// library multiplies by 10⁴ and rounds with `toFixed(0)`. If that round trip
+// lost a unit, the queue would carry a discount the depositor was never shown —
+// and one ppm is the difference between a request the solver fills and one it
+// skips. So the vector `1, 274, 999, 1000, 1026, 9999, 10000` (a lone unit, the
+// live 30d required spread, both sides of the 0.1% default, a required spread
+// over it, and both ends of the contract's 1% maximum) goes through the real
+// compiled `queueWithdraw` and is read back off the calldata.
+//
 // PASS (exit 0): withdrawStatus.success, two txs broadcast, on-wire calldata
-//   carries approve/offerAmount of exactly 10n * 10n**18n.
+//   carries approve/offerAmount of exactly 10n * 10n**18n, and every discount
+//   in the vector arrives on the wire as exactly its own ppm.
 // FAIL (exit 1): the original overflow is back — i.e. boring-vault-ui was
-//   downgraded below 1.6.3 or a regression shipped upstream.
+//   downgraded below 1.6.3 or a regression shipped upstream — or a discount
+//   did not survive the library's string conversion.
+// HARNESS FAILURE (exit 3): the stand-in React/RPC scaffolding did not settle;
+//   nothing is claimed about the library either way.
 "use strict";
 const path = require("path");
 const fs = require("fs");
@@ -258,6 +274,55 @@ async function main() {
     process.exit(1);
   }
   quiet.log("PASS: queueWithdraw(10 shares, 18-decimal vault) broadcasts approve + safeUpdateAtomicRequest with exact base units");
+
+  // ---- the on-wire discount ----
+  //
+  // The widget's own formatting, mirrored (src/lib/postingRule.ts
+  // `formatDiscountPercent`; src/lib/postingRule.test.ts brute-forces all of
+  // 0..10000 against the installed bignumber.js). Here the same string goes
+  // through the real compiled queueWithdraw and is read back off the calldata,
+  // so what is asserted is the wire and not the arithmetic.
+  const formatDiscountPercent = (ppm) => String(ppm / 1e4);
+  const DISCOUNT_PPM_VECTOR = [1, 274, 999, 1000, 1026, 9999, 10000];
+
+  for (const ppm of DISCOUNT_PPM_VECTOR) {
+    const before = provider.sentRaw.length;
+    await ctxValue.queueWithdraw(
+      signer,
+      "10",
+      { address: ADDR.usdt, decimals: 6 },
+      formatDiscountPercent(ppm),
+      "4"
+    );
+    render();
+    const status = capturedValue().withdrawStatus;
+    if (!status.success) {
+      quiet.error(`FAIL: queueWithdraw at ${ppm} ppm did not succeed: ${JSON.stringify(status)}`);
+      process.exit(1);
+    }
+    const sent = provider.sentRaw.slice(before).map((r) => ethers.Transaction.from(r));
+    const queued = sent[sent.length - 1];
+    if (!queued || queued.to.toLowerCase() !== ADDR.queue) {
+      quiet.error(`FAIL: ${ppm} ppm did not reach the queue: ${sent.length} tx(s) broadcast`);
+      process.exit(1);
+    }
+    const posted = queueIface.decodeFunctionData("safeUpdateAtomicRequest", queued.data);
+    if (posted[4] !== BigInt(ppm)) {
+      quiet.error(
+        `FAIL: discount ${ppm} ppm went on the wire as ${posted[4]} ` +
+          `(sent as "${formatDiscountPercent(ppm)}")`
+      );
+      quiet.error("The percent string does not survive the library's x 10^4 -> toFixed(0).");
+      process.exit(1);
+    }
+    if (posted[2][2] !== WANT) {
+      quiet.error(`FAIL: offerAmount changed under the discount vector: ${posted[2][2]}`);
+      process.exit(1);
+    }
+  }
+  quiet.log(
+    `PASS: on-wire discount equals the posted ppm for ${DISCOUNT_PPM_VECTOR.join(", ")}`
+  );
   process.exit(0);
 }
 

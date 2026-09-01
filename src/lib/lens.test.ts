@@ -18,6 +18,7 @@ import { describe, expect, it } from "vitest";
 
 import { ROSTER } from "../config/vaults";
 import { decodeUserPosition, decodeVaultMetrics, lensCalls } from "./lens";
+import { amountStringOf, offerSharesOf } from "./postingRule";
 import { vaultById } from "./vaultRegistry";
 
 const YIELD_PRIME = vaultById(ROSTER, "coinchange-24h-polygon");
@@ -140,6 +141,25 @@ describe("the figures those calls come back with", () => {
       YIELD_PRIME.ui.decimals
     );
     expect(shares).toBe(12.345678901234567);
+  });
+
+  it("keeps the raw balance beside the float, to the wei", () => {
+    // The float above is what every stat has always shown and must keep
+    // showing; the bigint beside it is what a redemption is posted over. MAX
+    // types the WHOLE balance, and a balance printed from its float can be a
+    // few wei short — dust left behind — or, rounded the other way, more shares
+    // than the queue can pull.
+    const raw = 12_345_678_901_234_567_890n;
+    const { shares, sharesRaw } = decodeUserPosition(
+      [raw, 0n],
+      YIELD_PRIME.ui.decimals
+    );
+    expect(sharesRaw).toBe(raw);
+    expect(BigInt(Math.round(shares * 1e18))).not.toBe(raw); // the float cannot
+    // …and MAX round-trips it: what the box says converts back to the wei.
+    expect(
+      offerSharesOf(amountStringOf(sharesRaw, YIELD_PRIME.ui.decimals), YIELD_PRIME.ui.decimals)
+    ).toBe(raw);
   });
 
   it("reads the share-unlock time as plain unix seconds", () => {

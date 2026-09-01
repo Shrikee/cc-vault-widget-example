@@ -148,6 +148,11 @@ export interface VaultMetricsFigures {
 
 export interface UserPositionFigures {
   shares: number;
+  // The same balance in raw share units, undivided. The float above is what the
+  // stats show; this is what a redemption is posted over, because an 18-dp
+  // balance has more significant digits than a double holds and MAX has to
+  // offer the whole of it, to the wei (src/lib/postingRule.ts).
+  sharesRaw: bigint;
   // Unix seconds; 0 ⇒ the wallet has never deposited.
   unlockAt: number;
 }
@@ -176,6 +181,7 @@ export function decodeUserPosition(
   const [balance, unlockTime] = result;
   return {
     shares: Number(balance) / 10 ** shareDecimals,
+    sharesRaw: balance,
     unlockAt: Number(unlockTime),
   };
 }

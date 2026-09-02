@@ -18,7 +18,7 @@
 // request can still go out at the holder's own spread. This repo has no
 // component tests by policy (spec, "Not covered by tests") and needs none here
 // — every sentence below is a model's, and the components render models.
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ROSTER } from "../config/vaults";
 import type { HolderEvent } from "../entitlement/entitlement";
@@ -85,12 +85,18 @@ const quoteFrom = (priced: ReturnType<typeof pricedHistory>) =>
   });
 
 describe("with the RPC broken", () => {
+  // reportError puts the endpoint's own words on the console (ADR-0004) —
+  // asserted in ./ledgerFloorCheck.test.ts, silenced here so the vectors'
+  // output stays the assertions'.
+  beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
+  afterEach(() => vi.restoreAllMocks());
+
   it("prices nothing anywhere, and says so in the spec's words", async () => {
     // 1. The floor check cannot establish the invariant.
     const floor = await readLedgerFloor(deadChain, VAULT, NOW);
     expect(floor).toEqual({
       status: "unsound",
-      reason: { kind: "read-failed", detail: "HTTP request failed" },
+      reason: { kind: "read-failed", detail: "the network request failed" },
     });
 
     // 2. So nothing may be priced from this wallet's history — even the one the
@@ -102,7 +108,8 @@ describe("with the RPC broken", () => {
     const quote = quoteFrom(priced);
     expect(quote.card).toEqual({
       kind: "unreadable",
-      headline: "Couldn't read your history from the chain — HTTP request failed.",
+      headline:
+        "Couldn't read your history from the chain — the network request failed.",
       body:
         "Nothing is priced. A request posts at your redemption spread and, on " +
         "this product, may be passed over if your shares haven't finished " +

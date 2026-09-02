@@ -3,7 +3,8 @@ import { usePublicClient } from "wagmi";
 
 import { CHAIN_ID } from "../config/chain";
 import { TOPIC_EXCHANGE_RATE_UPDATED } from "../config/history";
-import { errorMessage, scanLogs } from "../lib/logScan";
+import { scanLogs } from "../lib/logScan";
+import { readFailedReason, reportError } from "../lib/userError";
 import {
   planSharePriceScan,
   scanWindowDays,
@@ -136,6 +137,7 @@ export function useShareHistory(vault: Vault, selected: boolean): ShareHistory {
       // then would put the effect straight back into the scan it just did.
       if (held.current) setLanded((n) => n + 1);
     })().catch((e) => {
+      reportError("share-price history scan failed", e);
       scanning.current = false;
       // No partial data: a scan missing a chunk would understate the
       // share-price history, so a failed widening drops the narrower history it
@@ -149,7 +151,7 @@ export function useShareHistory(vault: Vault, selected: boolean): ShareHistory {
         windowDays,
         status: "error",
         events: [],
-        error: errorMessage(e),
+        error: readFailedReason(e),
       });
     });
   }, [client, vault, selected, landed]);

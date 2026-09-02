@@ -21,7 +21,7 @@ import type { PublicClient } from "viem";
 
 import { floorIsOldEnough, floorSoundness } from "./floorSoundness";
 import { SHARE_TOKEN_ABI } from "./lens";
-import { errorMessage } from "./logScan";
+import { readFailedReason, reportError } from "./userError";
 import type { LedgerFloorVerdict } from "./pricedHistory";
 import type { Vault } from "./vaultRegistry";
 
@@ -82,12 +82,14 @@ export async function readLedgerFloor(
   } catch (e) {
     // A read that did not land leaves the widget exactly as unable to establish
     // the invariant as an unsound floor does, so it degrades to the same place
-    // — but in the chain's own words, because this one is the endpoint's fault
-    // rather than the registry's, and a depositor pressing Try again may well
-    // fix it.
+    // — blaming the endpoint rather than the registry, because a depositor
+    // pressing Try again may well fix this one. The reason is classified, not
+    // quoted: the raw error names the endpoint, and that is for the console
+    // (ADR-0004), never for the card.
+    reportError("ledger-floor read failed", e);
     return {
       status: "unsound",
-      reason: { kind: "read-failed", detail: errorMessage(e) },
+      reason: { kind: "read-failed", detail: readFailedReason(e) },
     };
   }
 }

@@ -266,11 +266,12 @@ const termInDays = (seconds: number): string =>
 //
 // Two forms, because the two blame different things and a depositor can act on
 // only one of them. A failed read is the endpoint having a bad minute and the
-// reason is the chain's own words — quoted rather than paraphrased, since the
-// widget has no idea which of a dozen failures it was. A too-young ledger floor
-// is this widget shipped wrong: it names the registry's own block, how old it
-// is and the term it is too young for, and says plainly that no amount of
-// retrying by the depositor is the fix.
+// reason is the capture point's classified phrase (src/lib/userError.ts),
+// quoted as handed over — never the endpoint's own words, which are
+// console-only (ADR-0004). A too-young ledger floor is this widget shipped
+// wrong: it names the registry's own block, how old it is and the term it is
+// too young for, and says plainly that no amount of retrying by the depositor
+// is the fix.
 function unreadableHeadline(
   reason: HistoryUnreadable,
   vestingSeconds: number

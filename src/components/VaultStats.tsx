@@ -88,7 +88,9 @@ export function VaultStats({
         </div>
       </dl>
 
-      <InlineError>{error}</InlineError>
+      <InlineError>
+        {error ? `Couldn't refresh these figures — ${error}.` : null}
+      </InlineError>
       <InlineError>
         {history.status === "error"
           ? `Couldn't load share-price history: ${history.error}`

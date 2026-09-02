@@ -88,11 +88,13 @@ export function addressTopic(address: string): Hex {
   return `0x${address.slice(2).toLowerCase().padStart(64, "0")}`;
 }
 
-// Why a chain read failed, in the words most likely to help — a scan's chunk
-// here, and a Lens read in the metrics and position hooks. The provider's own
-// message (viem keeps it in `details`) beats viem's generic classification —
-// "Archive requests require a personal token" tells the operator what to fix,
-// "Invalid parameters" does not.
+// Why a chain read failed, in the words most likely to help THE OPERATOR. The
+// provider's own message (viem keeps it in `details`) beats viem's generic
+// classification — "Archive requests require a personal token" tells the
+// operator what to fix, "Invalid parameters" does not. For exactly that reason
+// these words are CONSOLE-ONLY: they name the endpoint and its products, so
+// what a depositor sees is classified in src/lib/userError.ts instead, and
+// this feeds the console.error beside each catch (ADR-0004).
 export function errorMessage(e: unknown): string {
   if (typeof e === "object" && e !== null) {
     const err = e as { details?: string; shortMessage?: string; message?: string };

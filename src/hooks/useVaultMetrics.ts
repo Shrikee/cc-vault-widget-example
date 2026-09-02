@@ -2,8 +2,8 @@ import { useReadContracts } from "wagmi";
 
 import { BASE_ASSET } from "../config/tokens";
 import { decodeVaultMetrics, lensCalls } from "../lib/lens";
-import { errorMessage } from "../lib/logScan";
 import type { Vault } from "../lib/vaultRegistry";
+import { useReportedReadError } from "./useReportedReadError";
 
 export interface VaultMetrics {
   tvl: number | null;
@@ -38,6 +38,10 @@ export function useVaultMetrics(vault: Vault, pollMs = 45_000): VaultMetrics {
     query: { refetchInterval: pollMs, retry: false },
   });
 
+  // Raw error to the console, classified phrase to the card (ADR-0004) — the
+  // shared shape in ./useReportedReadError.ts.
+  const error = useReportedReadError("vault-metrics read failed", query.error);
+
   // A failed poll leaves the last good figures on screen and adds the reason,
   // rather than blanking the card.
   const figures = query.data
@@ -51,7 +55,7 @@ export function useVaultMetrics(vault: Vault, pollMs = 45_000): VaultMetrics {
     shareValue: figures?.sharePrice ?? null,
     sharePriceRaw: figures?.sharePriceRaw ?? null,
     loading: query.isFetching,
-    error: query.error ? errorMessage(query.error) : null,
+    error,
     refetch: query.refetch,
   };
 }

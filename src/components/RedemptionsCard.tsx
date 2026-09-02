@@ -9,6 +9,7 @@ import type { WithdrawRequestState } from "../hooks/useWithdrawRequest";
 import type { PricedHistory } from "../lib/pricedHistory";
 import type { RequestRepost } from "../lib/requestRow";
 import type { Vault } from "../lib/vaultRegistry";
+import { actionFailedMessage, reportError } from "../lib/userError";
 import { RequestRow } from "./RequestRow";
 import { useToast } from "./Toaster";
 import { Card, InlineError } from "./ui";
@@ -182,7 +183,10 @@ export function RedemptionsCard({
       refetchRequest();
     } catch (e) {
       dismiss(tid);
-      show((e as Error)?.message ?? "Failed to revoke approval", "error");
+      // The raw error is for the console — an ethers failure serialises the
+      // request, URL included (ADR-0004). The toast gets the classified line.
+      reportError("approval revoke failed", e);
+      show(actionFailedMessage(e), "error");
     } finally {
       setStopping(false);
     }

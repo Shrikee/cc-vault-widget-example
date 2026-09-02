@@ -70,7 +70,9 @@ export type PinReads =
   // failed read but an answer) or because its own flag says so. Nothing on this
   // product has a share price while it holds.
   | { kind: "paused" }
-  // The tail or the batch did not land. `detail` is the chain's own words.
+  // The tail or the batch did not land. `detail` is the capture point's
+  // classified reason (src/lib/userError.ts) — never the raw error, which is
+  // console-only (ADR-0004).
   | { kind: "unread"; detail: string };
 
 // What one pin's reads came back as, before anything has decided what they
@@ -89,7 +91,8 @@ export interface PinBatch {
   rateUpdatedAt: number | null;
   paused: boolean | null;
   history: readonly HolderEvent[] | null;
-  // The chain's own words for whichever read did not land.
+  // The classified reason for whichever read did not land
+  // (src/lib/userError.ts).
   detail: string | null;
 }
 

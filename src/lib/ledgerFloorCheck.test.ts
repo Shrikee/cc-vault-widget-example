@@ -9,7 +9,8 @@
 //
 // The vault is the registry's real 30d entry, so the floor block and the
 // vesting term below are the ones the widget actually ships with.
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MockInstance } from "vitest";
 
 import { ROSTER } from "../config/vaults";
 import { readLedgerFloor } from "./ledgerFloorCheck";
@@ -117,7 +118,16 @@ describe("a floor that cannot be priced from", () => {
 });
 
 describe("when the RPC is broken", () => {
-  it("degrades with the chain's own words rather than throwing", async () => {
+  // reportError puts the endpoint's words on the console (ADR-0004). The spy
+  // keeps them out of the runner's output; the first vector asserts they
+  // still land there.
+  let log: MockInstance;
+  beforeEach(() => {
+    log = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("degrades with a classified reason rather than throwing or quoting", async () => {
     const verdict = await readLedgerFloor(
       chain({ broken: "HTTP request failed" }).client,
       VAULT_30D,
@@ -125,8 +135,14 @@ describe("when the RPC is broken", () => {
     );
     expect(verdict).toEqual({
       status: "unsound",
-      reason: { kind: "read-failed", detail: "HTTP request failed" },
+      reason: { kind: "read-failed", detail: "the network request failed" },
     });
+    // The endpoint's own words still exist — on the operator's surface, not
+    // the depositor's (ADR-0004).
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining("HTTP request failed"),
+      expect.anything()
+    );
   });
 
   it("degrades the same way when only the archive read fails", async () => {
@@ -139,7 +155,7 @@ describe("when the RPC is broken", () => {
     );
     expect(verdict).toEqual({
       status: "unsound",
-      reason: { kind: "read-failed", detail: "missing trie node" },
+      reason: { kind: "read-failed", detail: "the network request failed" },
     });
   });
 

@@ -17,7 +17,7 @@ import {
 import { recheckBeforePost } from "../lib/confirmRecheck";
 import { heldScan } from "../lib/heldScan";
 import { isAccountantPaused, lastRateUpdate, pinCalls } from "../lib/lens";
-import { errorMessage } from "../lib/logScan";
+import { readFailedReason, reportError } from "../lib/userError";
 import { scanKey } from "../lib/scanRuns";
 import type { Vault } from "../lib/vaultRegistry";
 import { deriveWallet, readWalletScan } from "../lib/walletScan";
@@ -149,6 +149,7 @@ export function useConfirmPin(
           : accountant.status !== "success"
           ? accountant.error
           : null;
+      if (failed !== null) reportError("confirm-pin batch read failed", failed);
       return pinReadsOf({
         blockNumber: head.number,
         now: Number(head.timestamp),
@@ -163,13 +164,14 @@ export function useConfirmPin(
             ? isAccountantPaused(accountant.result)
             : null,
         history: deriveWallet(scan, vault, address).history ?? null,
-        detail: failed === null ? null : errorMessage(failed),
+        detail: failed === null ? null : readFailedReason(failed),
       });
     } catch (e) {
       // The tail is ALL-OR-NOTHING like every other scan run: a dropped chunk
       // or an undated transfer would price an unvested lot at the full share
       // price, which is the over-quote the solver skips.
-      return pinUnread(errorMessage(e));
+      reportError("confirm-pin read failed", e);
+      return pinUnread(readFailedReason(e));
     }
   }, [client, vault, address]);
 

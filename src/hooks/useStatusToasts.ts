@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useToast } from "../components/Toaster";
+import { actionFailedMessage } from "../lib/userError";
 import { explorerTx } from "../config/chain";
 import type { DepositStatus, WithdrawStatus } from "../lib/boringVault";
 
@@ -41,7 +42,10 @@ export function useStatusToasts(
         hrefLabel: "View transaction",
       });
     } else if (status.error) {
-      show(status.error, "error");
+      // `status.error` is the SDK's raw ethers message (the SDK logs the full
+      // error itself before setting it); classified so the toast never quotes
+      // the endpoint or the call (ADR-0004).
+      show(actionFailedMessage(status.error), "error");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status.loading, status.success, status.error, status.tx_hash, active]);

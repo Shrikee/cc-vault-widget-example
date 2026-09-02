@@ -5,6 +5,7 @@ import { WITHDRAW_TOKEN } from "../config/tokens";
 import { isFillTransition, type QueueSnapshot } from "../lib/requestFill";
 import { nowSeconds } from "../lib/time";
 import type { Vault } from "../lib/vaultRegistry";
+import { useReportedReadError } from "./useReportedReadError";
 
 // The user's open redemption request, decoded to human units.
 export interface WithdrawRequest {
@@ -101,6 +102,14 @@ export function useWithdrawRequest(
   const raw = reqQuery.data;
   const allowance = allowanceQuery.data;
 
+  // Raw errors to the console, classified phrases to the card (ADR-0004) —
+  // the shared shape in ./useReportedReadError.ts, once per query.
+  const reqError = useReportedReadError("atomic-queue read failed", reqQuery.error);
+  const allowanceError = useReportedReadError(
+    "queue-allowance read failed",
+    allowanceQuery.error
+  );
+
   // Fill detection: remember the last read of this queue, tagged with the queue
   // and the wallet it was read for, and announce a fill when the read that
   // follows it is one. The callback lives in a ref so a new identity each
@@ -156,11 +165,7 @@ export function useWithdrawRequest(
   return {
     request,
     loading: reqQuery.isLoading || allowanceQuery.isLoading,
-    error: reqQuery.error
-      ? reqQuery.error.message
-      : allowanceQuery.error
-      ? allowanceQuery.error.message
-      : null,
+    error: reqError ?? allowanceError,
     refetch: () => {
       reqQuery.refetch();
       allowanceQuery.refetch();

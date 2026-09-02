@@ -4,7 +4,7 @@ import { usePublicClient } from "wagmi";
 import { CHAIN_ID } from "../config/chain";
 import type { HolderEvent } from "../entitlement/entitlement";
 import { dropScan, holdScan } from "../lib/heldScan";
-import { errorMessage } from "../lib/logScan";
+import { readFailedReason, reportError } from "../lib/userError";
 import {
   depositScanRange,
   planWalletScan,
@@ -256,7 +256,8 @@ export function useDepositHistory(
         if (scan.kind === "full") forgetHeld(scanKey(vault.id, address));
         const step = abandonScan(runs.current, scan);
         runs.current = step.runs;
-        setState({ status: "error", error: errorMessage(e) });
+        reportError("deposit-history scan failed", e);
+        setState({ status: "error", error: readFailedReason(e) });
         if (step.run) perform(step.run);
       });
     },

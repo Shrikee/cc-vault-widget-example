@@ -58,12 +58,13 @@ export const formatShares = (units: bigint, decimals: number): string =>
 // A plain count — "93,051,200". What a block number is.
 export const formatCount = (units: bigint): string => decimalString(units, 0, 0, 0);
 
-// The chain's own words, as the tail of a sentence that supplies its own full
-// stop. Not a figure — but it belongs here for the same reason the five above
-// do: it is written into "Couldn't read your history from the chain — {reason}."
-// on the quote card and into "Couldn't re-read your history — {reason}." on the
-// confirm modal, and two copies of the trim are two chances for one of them to
-// render "timed out.. Nothing was posted."
+// The reason a read failed — userError.ts's classified phrase — as the tail
+// of a sentence that supplies its own full stop. Not a figure — but it
+// belongs here for the same reason the five above do: it is written into
+// "Couldn't read your history from the chain — {reason}." on the quote card
+// and into "Couldn't re-read your history — {reason}." on the confirm modal,
+// and two copies of the trim are two chances for one of them to render
+// "timed out.. Nothing was posted."
 export const quotedReason = (detail: string): string =>
   detail.replace(/[.\s]+$/, "");
 

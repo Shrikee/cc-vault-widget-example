@@ -20,7 +20,7 @@ import { fmtPct } from "../lib/format";
 
 const FOOTNOTE = "Past performance does not guarantee future returns.";
 const HISTORY_UNAVAILABLE =
-  "Share-price history is unavailable on the current RPC.";
+  "Share-price history is temporarily unavailable.";
 
 // The windows the toggle offers — 3, 7 or 30 days, nothing else.
 type TrailingWindow = (typeof WINDOWS)[number];

@@ -2,8 +2,8 @@ import { useReadContracts } from "wagmi";
 import type { Address } from "viem";
 
 import { decodeUserPosition, lensCalls } from "../lib/lens";
-import { errorMessage } from "../lib/logScan";
 import type { Vault } from "../lib/vaultRegistry";
+import { useReportedReadError } from "./useReportedReadError";
 
 export interface UserPosition {
   shares: number | null;
@@ -44,6 +44,10 @@ export function useUserPosition(vault: Vault, address?: Address): UserPosition {
     query: { enabled: Boolean(address), retry: false },
   });
 
+  // Raw error to the console, classified phrase to the card (ADR-0004) — the
+  // shared shape in ./useReportedReadError.ts.
+  const error = useReportedReadError("user-position read failed", query.error);
+
   const figures = query.data
     ? decodeUserPosition(query.data, vault.ui.decimals)
     : null;
@@ -53,7 +57,7 @@ export function useUserPosition(vault: Vault, address?: Address): UserPosition {
     sharesRaw: figures?.sharesRaw ?? null,
     unlockAt: figures?.unlockAt ?? null,
     loading: query.isFetching,
-    error: query.error ? errorMessage(query.error) : null,
+    error,
     refetch: query.refetch,
   };
 }

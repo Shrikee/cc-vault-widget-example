@@ -15,7 +15,7 @@ import { actionFailedMessage, readFailedReason } from "./userError";
 const httpRequestFailed = {
   name: "HttpRequestError",
   message:
-    "HTTP request failed.\n\nStatus: 402\nURL: https://shy-black-haze.matic.quiknode.pro/0123456789abcdef0123456789abcdef01234567/\nRequest body: {...}",
+    "HTTP request failed.\n\nStatus: 402\nURL: https://some-vivid-name.matic.example-rpc.invalid/0123456789abcdef0123456789abcdef01234567/\nRequest body: {...}",
   shortMessage: "HTTP request failed.",
   details:
     "Archive requests require the QuickNode Archive add-on on your quiknode.pro plan",
@@ -26,7 +26,7 @@ const httpRequestFailed = {
 const wrappedReadFailure = {
   name: "ContractFunctionExecutionError",
   message:
-    'HTTP request failed.\n\nURL: https://shy-black-haze.matic.quiknode.pro/0123456789abcdef/\nContract Call:\n  address: 0x9fA6…\n  function: getUserAtomicRequest(...)\nDocs: https://viem.sh/docs/contract/readContract',
+    'HTTP request failed.\n\nURL: https://some-vivid-name.matic.example-rpc.invalid/0123456789abcdef/\nContract Call:\n  address: 0x9fA6…\n  function: getUserAtomicRequest(...)\nDocs: https://viem.sh/docs/contract/readContract',
   shortMessage: "HTTP request failed.",
   cause: httpRequestFailed,
 };
@@ -122,7 +122,7 @@ describe("nothing from the input reaches the output", () => {
     wrappedReadFailure,
     ethersRejected,
     new Error(
-      "could not coalesce error (error={...}, url=https://shy-black-haze.matic.quiknode.pro/deadbeef/)"
+      "could not coalesce error (error={...}, url=https://some-vivid-name.matic.example-rpc.invalid/deadbeef/)"
     ),
     "Archive requests require a personal quiknode.pro token",
     { code: "SERVER_ERROR", message: "bad gateway", details: "cloudflare 502 at quiknode" },
